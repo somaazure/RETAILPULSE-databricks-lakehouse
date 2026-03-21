@@ -10,7 +10,7 @@
   "libraries": [
     {
       "notebook": {
-        "path": "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/07_dlt_main_tables"
+        "path": "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/archive/07_dlt_main_tables"
       }
     }
   ],
@@ -18,3 +18,4 @@
     "pipelines.enableTrackHistory": "true"
   }
 }
+

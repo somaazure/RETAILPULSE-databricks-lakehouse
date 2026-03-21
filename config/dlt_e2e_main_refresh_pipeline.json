@@ -1,16 +1,16 @@
 {
-  "name": "RetailPulse DLT Quality Pipeline",
+  "name": "RetailPulse End-to-End Main Refresh DLT",
   "development": true,
   "continuous": false,
   "channel": "CURRENT",
   "photon": true,
   "serverless": true,
   "catalog": "retailpulse",
-  "target": "dlt",
+  "target": "ops",
   "libraries": [
     {
       "notebook": {
-        "path": "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/archive/06_dlt_pipeline"
+        "path": "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/08_dlt_e2e_main_refresh"
       }
     }
   ],
@@ -18,4 +18,3 @@
     "pipelines.enableTrackHistory": "true"
   }
 }
-
