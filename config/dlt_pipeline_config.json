@@ -1,0 +1,20 @@
+{
+  "name": "RetailPulse DLT Quality Pipeline",
+  "development": true,
+  "continuous": false,
+  "channel": "CURRENT",
+  "photon": true,
+  "serverless": true,
+  "catalog": "retailpulse",
+  "target": "dlt",
+  "libraries": [
+    {
+      "notebook": {
+        "path": "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/06_dlt_pipeline"
+      }
+    }
+  ],
+  "configuration": {
+    "pipelines.enableTrackHistory": "true"
+  }
+}

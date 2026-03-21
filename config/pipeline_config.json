@@ -1,0 +1,136 @@
+{
+    "pipelines": [
+        {
+            "name": "orders_bronze_pipeline",
+            "layer": "bronze",
+            "source": {
+                "type": "stream",
+                "format": "csv",
+                "path": "/FileStore/retailpulse/orders/",
+                "options": {
+                    "header": "true",
+                    "inferSchema": "true"
+                }
+            },
+            "target": {
+                "catalog": "retailpulse",
+                "schema": "bronze",
+                "table": "orders"
+            },
+            "write": {
+                "mode": "append",
+                "checkpointLocation": "/FileStore/checkpoints/orders"
+            }
+        },
+        {
+            "name": "orders_silver_pipeline",
+            "layer": "silver",
+            "source": {
+                "type": "batch",
+                "table": "retailpulse.bronze.orders"
+            },
+            "transformations": {
+                "deduplicate": {
+                    "enabled": true,
+                    "keys": [
+                        "order_id"
+                    ]
+                },
+                "filters": [
+                    "quantity > 0",
+                    "price > 0"
+                ],
+                "cast": {
+                    "order_id": "int",
+                    "customer_id": "int",
+                    "product_id": "int",
+                    "quantity": "int",
+                    "price": "double"
+                }
+            },
+            "target": {
+                "catalog": "retailpulse",
+                "schema": "silver",
+                "table": "orders"
+            },
+            "write": {
+                "mode": "overwrite"
+            }
+        },
+        {
+            "name": "dim_product_gold_pipeline",
+            "layer": "gold",
+            "source": {
+                "type": "batch",
+                "table": "retailpulse.silver.products"
+            },
+            "target": {
+                "catalog": "retailpulse",
+                "schema": "gold",
+                "table": "dim_product"
+            },
+            "scd": {
+                "type": "SCD2",
+                "business_key": "product_id",
+                "track_columns": [
+                    "price",
+                    "category_id"
+                ],
+                "effective_date_column": "start_date",
+                "end_date_column": "end_date",
+                "current_flag": "is_current"
+            }
+        },
+        {
+            "name": "fact_sales_gold_pipeline",
+            "layer": "gold",
+            "source": {
+                "type": "batch",
+                "tables": [
+                    "retailpulse.silver.orders",
+                    "retailpulse.gold.dim_product",
+                    "retailpulse.gold.dim_customer"
+                ]
+            },
+            "joins": [
+                {
+                    "left": "orders.product_id",
+                    "right": "dim_product.product_id",
+                    "type": "inner"
+                },
+                {
+                    "left": "orders.customer_id",
+                    "right": "dim_customer.customer_id",
+                    "type": "inner"
+                }
+            ],
+            "target": {
+                "catalog": "retailpulse",
+                "schema": "gold",
+                "table": "fact_sales"
+            },
+            "write": {
+                "mode": "overwrite",
+                "partitionBy": [
+                    "order_date"
+                ]
+            },
+            "data_quality": {
+                "not_null": [
+                    "order_id",
+                    "product_id"
+                ],
+                "range_checks": {
+                    "quantity": [
+                        1,
+                        100
+                    ]
+                }
+            },
+            "incremental": {
+                "column": "order_timestamp",
+                "watermark": "1 day"
+            }
+        }
+    ]
+}
