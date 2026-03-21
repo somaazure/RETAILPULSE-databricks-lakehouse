@@ -1,6 +1,6 @@
 # RetailPulse Runbook
 
-This runbook documents the enterprise-hybrid operating model implemented on this branch.
+This runbook documents the active enterprise operating model on this branch.
 
 ## Workspace Path
 
@@ -20,7 +20,7 @@ Purpose:
 
 - DLT owns Bronze ingestion
 - DLT owns Silver curation and Silver quarantine
-- this is the only DLT layer in the enterprise model
+- this is the only active DLT layer in the enterprise model
 
 Outputs:
 
@@ -28,7 +28,11 @@ Outputs:
 - `retailpulse.silver.orders`
 - `retailpulse.ops.silver_orders_quarantine`
 
-## Modular Gold Jobs
+## Gold Dims And Facts Job
+
+Config file:
+
+`config/job_gold_dims_facts.json`
 
 Notebook assets:
 
@@ -53,26 +57,22 @@ Gold outputs:
 - `retailpulse.gold.fact_sales`
 - `retailpulse.ops.fact_sales_quarantine`
 
-## Enterprise Workflow Template
+## Enterprise Orchestrator
 
 Config file:
 
-`config/job_enterprise_hybrid_workflow.json`
+`config/job_enterprise_orchestrator.json`
 
-Task order:
+Purpose:
 
-1. `00_generate_orders_once`
-2. Bronze/Silver DLT pipeline task
-3. `09_product_master`
-4. `10_dim_product`
-5. `11_dim_customer`
-6. `12_dim_date`
-7. `13_fact_sales`
+- provide one controller job for manual or scheduled execution
+- run the Bronze/Silver DLT task first
+- run the Gold batch job only after DLT succeeds
 
-Important:
+Execution order:
 
-- update the placeholder pipeline id in the job config before creating the job
-- this template is intentionally modular so dim jobs can be rerun independently when needed
+1. DLT pipeline task
+2. Gold job task with dependency on DLT success
 
 ## One-Time Ownership Cutover
 
@@ -92,7 +92,7 @@ Recommended sequence:
 1. back up current tables if needed
 2. stop the older full-DLT refresh flow
 3. drop the DLT-managed Gold objects
-4. run the enterprise-hybrid Gold notebooks so they recreate standard Delta tables
+4. run the enterprise Gold notebooks so they recreate standard Delta tables
 
 ## Archive
 
@@ -100,7 +100,9 @@ Older notebook variants are preserved under:
 
 `/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/archive`
 
-These remain useful for portfolio demos, learning comparisons, and migration reference.
+Legacy config and job definitions are preserved locally under:
+
+`config/archive`
 
 ## Sync Command
 
