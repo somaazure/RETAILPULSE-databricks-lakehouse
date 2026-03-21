@@ -1,0 +1,84 @@
+{
+  "name": "RetailPulse Enterprise Hybrid Workflow",
+  "tasks": [
+    {
+      "task_key": "generate_orders_once",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/00_generate_orders_once"
+      }
+    },
+    {
+      "task_key": "bronze_silver_dlt",
+      "depends_on": [
+        {
+          "task_key": "generate_orders_once"
+        }
+      ],
+      "pipeline_task": {
+        "pipeline_id": "44aa85ea-ed99-41d9-9f1b-f17754ce6094"
+      }
+    },
+    {
+      "task_key": "product_master",
+      "depends_on": [
+        {
+          "task_key": "bronze_silver_dlt"
+        }
+      ],
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/09_product_master"
+      }
+    },
+    {
+      "task_key": "dim_product",
+      "depends_on": [
+        {
+          "task_key": "product_master"
+        }
+      ],
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/10_dim_product"
+      }
+    },
+    {
+      "task_key": "dim_customer",
+      "depends_on": [
+        {
+          "task_key": "bronze_silver_dlt"
+        }
+      ],
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/11_dim_customer"
+      }
+    },
+    {
+      "task_key": "dim_date",
+      "depends_on": [
+        {
+          "task_key": "bronze_silver_dlt"
+        }
+      ],
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/12_dim_date"
+      }
+    },
+    {
+      "task_key": "fact_sales",
+      "depends_on": [
+        {
+          "task_key": "dim_product"
+        },
+        {
+          "task_key": "dim_customer"
+        },
+        {
+          "task_key": "dim_date"
+        }
+      ],
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/13_fact_sales"
+      }
+    }
+  ]
+}
+

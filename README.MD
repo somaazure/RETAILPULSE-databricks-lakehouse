@@ -1,230 +1,138 @@
 # RetailPulse: Databricks Lakehouse Retail Analytics Project
 
-RetailPulse is a Databricks Lakehouse project that demonstrates a medallion-style retail analytics platform using Unity Catalog, Delta Lake, Auto Loader, SCD Type 2 dimensions, and Delta Live Tables for data quality validation.
+RetailPulse demonstrates two operating models for a Databricks retail pipeline:
 
-The project simulates retail order ingestion, curates Bronze-Silver-Gold datasets, builds star-schema style dimensions and facts, and adds a DLT quality layer with curated outputs and quarantine tables for rejected or unresolved records.
+- `Portfolio / Learning mode`: one-click end-to-end DLT ownership of Bronze, Silver, Gold, and quarantine outputs.
+- `Enterprise hybrid mode`: DLT for Bronze and Silver, Jobs/Workflows for Gold dimensions and facts.
 
-## Highlights
+This branch implements the enterprise-hybrid layout because it scales better operationally: streaming ingestion and row-level DQ stay in DLT, while business modeling stays modular in downstream jobs.
 
-- Databricks Lakehouse with Unity Catalog
-- Bronze-Silver-Gold data engineering pattern
-- Auto Loader ingestion for landed order files
-- Silver-layer validation, casting, and deduplication
-- SCD Type 2 `dim_product`
-- Gold fact table `fact_sales`
-- DLT quality pipeline with `*_dlt` and `*_quarantine` outputs
-- Prompt-driven AI-assisted development using reusable project skills
+## Enterprise Architecture
+
+```mermaid
+flowchart LR
+    A[Order CSV Files\nUnity Catalog Volume] --> B[DLT Bronze\nretailpulse.bronze.orders]
+    B --> C[DLT Silver\nretailpulse.silver.orders]
+    B --> Q1[Ops Quarantine\nretailpulse.ops.silver_orders_quarantine]
+
+    C --> D[Job: Dim Customer\nretailpulse.gold.dim_customer]
+    C --> E[Job: Dim Date\nretailpulse.gold.dim_date]
+    C --> F[Job: Fact Sales Build]
+
+    P[Job: Product Master\nretailpulse.silver.products] --> G[Job: SCD2 Dim Product\nretailpulse.gold.dim_product]
+    G --> F
+    D --> F
+    E --> F
+
+    F --> H[Gold Fact\nretailpulse.gold.fact_sales]
+    F --> Q2[Ops Quarantine\nretailpulse.ops.fact_sales_quarantine]
+```
+
+## Why This Layout
+
+- DLT is best used where schema drift, rescue data, row expectations, and streaming ingestion matter most.
+- Gold logic usually changes more often with business rules, SCD policies, backfills, and release cycles.
+- Splitting Gold into modular jobs reduces blast radius and makes reruns easier.
+- Quarantine still exists, but Silver quarantine is handled in DLT and Fact quarantine is handled in Gold jobs.
 
 ## Project Structure
 
 ```text
 RetailPulse/
 |-- notebooks/
-|   |-- 01_data_generator.py
-|   |-- 02_bronze_ingestion.py
-|   |-- 03_silver_transform.py
-|   |-- 04_dim_tables.py
-|   |-- 05_fact_tables.py
-|   `-- 06_dlt_pipeline.py
+|   |-- 00_generate_orders_once.py
+|   |-- 08_dlt_e2e_main_refresh.py      # Bronze + Silver DLT in this branch
+|   |-- 09_product_master.py
+|   |-- 10_dim_product.py
+|   |-- 11_dim_customer.py
+|   |-- 12_dim_date.py
+|   |-- 13_fact_sales.py
+|   `-- archive/
+|       |-- 01_data_generator.py
+|       |-- 02_bronze_ingestion.py
+|       |-- 03_silver_transform.py
+|       |-- 04_dim_tables.py
+|       |-- 05_fact_tables.py
+|       |-- 06_dlt_pipeline.py
+|       `-- 07_dlt_main_tables.py
 |-- config/
-|   |-- pipeline_config.json
-|   `-- dlt_pipeline_config.json
-|-- src/utils/
-|   |-- delta_utils.py
-|   `-- validation_utils.py
+|   |-- dlt_bronze_silver_pipeline.json
+|   `-- job_enterprise_hybrid_workflow.json
 |-- .ai/
-|   |-- context/
-|   `-- skills/
+|-- src/utils/
 `-- sync_to_workspace.ps1
 ```
 
-## Architecture Diagram
+## Enterprise Build Flow
 
-```mermaid
-flowchart LR
-    A[Order CSV Files\nUnity Catalog Volume] --> B[Bronze\nretailpulse.bronze.orders]
-    B --> C[Silver\nretailpulse.silver.orders]
-    C --> D[Gold Dim Customer\nretailpulse.gold.dim_customer]
-    C --> E[Gold Dim Date\nretailpulse.gold.dim_date]
-    F[Silver Products\nretailpulse.silver.products] --> G[Gold Dim Product SCD2\nretailpulse.gold.dim_product]
-    C --> H[Gold Fact Sales\nretailpulse.gold.fact_sales]
-    D --> H
-    E --> H
-    G --> H
+1. Run [00_generate_orders_once.py](c:/Knowledge/2026_GenAI/RetailPulse/notebooks/00_generate_orders_once.py) to land a new order batch.
+2. Run the DLT pipeline from [dlt_bronze_silver_pipeline.json](c:/Knowledge/2026_GenAI/RetailPulse/config/dlt_bronze_silver_pipeline.json).
+3. Run Gold job notebooks in order:
+   - [09_product_master.py](c:/Knowledge/2026_GenAI/RetailPulse/notebooks/09_product_master.py)
+   - [10_dim_product.py](c:/Knowledge/2026_GenAI/RetailPulse/notebooks/10_dim_product.py)
+   - [11_dim_customer.py](c:/Knowledge/2026_GenAI/RetailPulse/notebooks/11_dim_customer.py)
+   - [12_dim_date.py](c:/Knowledge/2026_GenAI/RetailPulse/notebooks/12_dim_date.py)
+   - [13_fact_sales.py](c:/Knowledge/2026_GenAI/RetailPulse/notebooks/13_fact_sales.py)
+4. Orchestrate them together with [job_enterprise_hybrid_workflow.json](c:/Knowledge/2026_GenAI/RetailPulse/config/job_enterprise_hybrid_workflow.json).
 
-    B --> I[DLT Silver Orders\nretailpulse.dlt.silver_orders_dlt]
-    B --> J[DLT Silver Quarantine\nretailpulse.dlt.silver_orders_quarantine]
-    F --> K[DLT Silver Products\nretailpulse.dlt.silver_products_dlt]
-    G --> L[DLT Dim Product Current\nretailpulse.dlt.dim_product_current_dlt]
-    D --> M[DLT Dim Customer\nretailpulse.dlt.dim_customer_dlt]
-    E --> N[DLT Dim Date\nretailpulse.dlt.dim_date_dlt]
-    I --> O[DLT Fact Sales\nretailpulse.dlt.fact_sales_dlt]
-    I --> P[DLT Fact Quarantine\nretailpulse.dlt.fact_sales_quarantine]
-    L --> O
-    M --> O
-    N --> O
-    L --> P
-    M --> P
-    N --> P
-```
+## Enterprise Assets
 
-## Core Tables
+### DLT
 
-### Base Medallion Tables
+- Bronze: `retailpulse.bronze.orders`
+- Silver: `retailpulse.silver.orders`
+- Silver quarantine: `retailpulse.ops.silver_orders_quarantine`
 
-- `retailpulse.bronze.orders`
-- `retailpulse.silver.orders`
-- `retailpulse.silver.products`
-- `retailpulse.gold.dim_product`
-- `retailpulse.gold.dim_customer`
-- `retailpulse.gold.dim_date`
-- `retailpulse.gold.fact_sales`
+### Job-Owned Gold
 
-### DLT Quality Tables
+- Product master: `retailpulse.silver.products`
+- Product dimension: `retailpulse.gold.dim_product`
+- Customer dimension: `retailpulse.gold.dim_customer`
+- Date dimension: `retailpulse.gold.dim_date`
+- Fact table: `retailpulse.gold.fact_sales`
+- Fact quarantine: `retailpulse.ops.fact_sales_quarantine`
 
-- `retailpulse.dlt.silver_orders_dlt`
-- `retailpulse.dlt.silver_orders_quarantine`
-- `retailpulse.dlt.silver_products_dlt`
-- `retailpulse.dlt.dim_product_current_dlt`
-- `retailpulse.dlt.dim_customer_dlt`
-- `retailpulse.dlt.dim_date_dlt`
-- `retailpulse.dlt.fact_sales_dlt`
-- `retailpulse.dlt.fact_sales_quarantine`
+## One-Time Cutover Note
 
-## Reproduce The Project
+If your workspace currently has Gold tables created by the old one-click DLT branch, those tables are DLT-managed materialized views. Before running the enterprise-hybrid Gold notebooks against the same table names, retire that old DLT ownership first.
 
-### Prerequisites
+Practically, that means:
 
-- Databricks workspace with Unity Catalog enabled
-- permissions to create catalog, schemas, volumes, tables, and DLT pipelines
-- a compute cluster for notebooks
-- serverless pipelines enabled for DLT in your workspace
-- this repo cloned locally or synced into Databricks workspace
+- stop the old one-click DLT flow
+- back up existing `retailpulse.silver.products`, `retailpulse.gold.*`, and `retailpulse.ops.fact_sales_quarantine` if needed
+- drop the DLT-managed versions of those tables
+- let the enterprise Gold notebooks recreate them as standard Delta tables
 
-### Step 1: Sync Project To Databricks Workspace
+`retailpulse.bronze.orders` and `retailpulse.silver.orders` remain DLT-owned in this branch.
 
-If working locally and using the same sync approach as this repo:
+## Create The Enterprise Bronze/Silver DLT Pipeline
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\sync_to_workspace.ps1
+databricks pipelines create --json @config/dlt_bronze_silver_pipeline.json --profile shekartelstra
 ```
 
-### Step 2: Run The Base Notebooks In Order
+## Create The Enterprise Hybrid Workflow Job
 
-Run these notebooks in Databricks in the following order:
-
-1. `notebooks/archive/01_data_generator.py`
-   Generates synthetic order CSV files into the Unity Catalog volume.
-
-2. `notebooks/archive/02_bronze_ingestion.py`
-   Uses Auto Loader to ingest the landed files into `retailpulse.bronze.orders`.
-
-3. `notebooks/archive/03_silver_transform.py`
-   Cleans, casts, validates, and deduplicates records into `retailpulse.silver.orders`.
-
-4. `notebooks/archive/04_dim_tables.py`
-   Builds `retailpulse.silver.products`, maintains `retailpulse.gold.dim_product`, and creates `dim_customer` and `dim_date`.
-
-5. `notebooks/archive/05_fact_tables.py`
-   Creates `retailpulse.gold.fact_sales` from silver orders and gold dimensions.
-
-### Step 3: Create And Run The DLT Pipeline
-
-This project includes a DLT pipeline config at `config/dlt_pipeline_config.json`.
-
-Create the pipeline:
+Update the placeholder pipeline id in [job_enterprise_hybrid_workflow.json](c:/Knowledge/2026_GenAI/RetailPulse/config/job_enterprise_hybrid_workflow.json), then create the job:
 
 ```powershell
-databricks pipelines create --json @config/dlt_pipeline_config.json --profile shekartelstra
+databricks jobs create --json @config/job_enterprise_hybrid_workflow.json --profile shekartelstra
 ```
 
-Start an update:
-
-```powershell
-databricks pipelines start-update <PIPELINE_ID> --profile shekartelstra
-```
-
-Notes:
-
-- the DLT pipeline is configured for serverless compute
-- the DLT target schema is `retailpulse.dlt`
-- the DLT notebook is `notebooks/archive/06_dlt_pipeline.py`
-- base medallion tables must exist before the DLT pipeline is run
-
-## How The DLT Layer Works
-
-- `*_dlt` tables are curated DLT-managed outputs
-- `*_quarantine` tables capture rejected or unresolved records with `dq_reason`
-- `silver_orders_dlt` applies validation and deduplication to bronze orders
-- `fact_sales_dlt` only keeps fully resolved fact rows
-- `fact_sales_quarantine` stores rows that fail dimension resolution for remediation and replay
-
-## Validate The Build
-
-Run these queries in Databricks SQL or a notebook after execution:
+## Validation Queries
 
 ```sql
 SELECT COUNT(*) FROM retailpulse.bronze.orders;
 SELECT COUNT(*) FROM retailpulse.silver.orders;
+SELECT COUNT(*) FROM retailpulse.ops.silver_orders_quarantine;
+SELECT COUNT(*) FROM retailpulse.silver.products;
 SELECT COUNT(*) FROM retailpulse.gold.dim_product;
 SELECT COUNT(*) FROM retailpulse.gold.dim_customer;
 SELECT COUNT(*) FROM retailpulse.gold.dim_date;
 SELECT COUNT(*) FROM retailpulse.gold.fact_sales;
-SELECT COUNT(*) FROM retailpulse.dlt.silver_orders_dlt;
-SELECT COUNT(*) FROM retailpulse.dlt.silver_orders_quarantine;
-SELECT COUNT(*) FROM retailpulse.dlt.fact_sales_dlt;
-SELECT COUNT(*) FROM retailpulse.dlt.fact_sales_quarantine;
+SELECT COUNT(*) FROM retailpulse.ops.fact_sales_quarantine;
 ```
-
-Inspect current-product SCD quality:
-
-```sql
-SELECT product_id, COUNT(*) AS current_count
-FROM retailpulse.gold.dim_product
-WHERE is_current = true
-GROUP BY product_id
-HAVING COUNT(*) > 1;
-```
-
-Inspect quarantined fact rows:
-
-```sql
-SELECT dq_reason, COUNT(*) AS row_count
-FROM retailpulse.dlt.fact_sales_quarantine
-GROUP BY dq_reason
-ORDER BY row_count DESC;
-```
-
-## Experiment Ideas
-
-- change DLT expectations from soft `expect` to `expect_or_drop` or `expect_or_fail` and compare behavior
-- add new DQ rules for category validation, timestamp sanity, or duplicate detection
-- extend product master generation so more fact rows resolve successfully into `fact_sales_dlt`
-- replace current-mode product joins with historical SCD joins based on event timestamp
-- add remediation status columns and replay logic on quarantine tables
-- introduce inventory or returns pipelines using the same project skill pattern
-
-## AI-Assisted Build Pattern
-
-This repo also includes project-specific AI skills under `.ai/skills/` for:
-
-- bronze pipeline generation
-- silver transformation logic
-- SCD2 merge patterns
-- fact table build patterns
-- streaming pipeline guidance
-
-See `.ai/skills/README.md` for sample prompts and end-to-end usage guidance.
-
-## Current Limitations
-
-- `dim_product` is currently seeded from a small sample product dataset
-- fact resolution can fail for product IDs not present in that sample, which is why quarantine handling is useful
-- the current project uses `ingest_ts` as the date driver instead of a true business order timestamp
 
 ## Repository
 
-GitHub repository:
-
 `https://github.com/somaazure/RETAILPULSE-databricks-lakehouse`
-

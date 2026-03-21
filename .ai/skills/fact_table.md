@@ -4,7 +4,17 @@ Create PySpark code to build gold-layer fact tables with support for both curren
 
 ## Objective
 
-Build fact tables at the correct transaction grain, resolve dimension keys correctly, and write the output as Delta tables in the gold layer.
+Build fact tables at the correct transaction grain, resolve dimension keys correctly, and write the output as Delta tables in the Gold layer.
+
+## Execution Context
+
+Fact table generation belongs to Gold-layer batch jobs, not DLT pipelines.
+
+Use this skill when:
+
+- inputs already exist in `retailpulse.silver` tables
+- dimensions are built or maintained in Gold-layer jobs
+- the fact build needs to run as a modular workflow task inside a Databricks Job
 
 ## Supported Join Modes
 
@@ -22,11 +32,13 @@ Use `current_mode` unless the request explicitly asks for historical SCD alignme
 
 ## Requirements
 
+- Read inputs from curated `retailpulse.silver` tables
 - Use surrogate keys where available
 - Maintain correct grain: one row per transaction
 - Ensure referential integrity across joined dimensions
-- Write output to gold layer Delta tables
-- When using DLT, decide explicitly whether referential failures should fail the pipeline or be routed to quarantine
+- Write output to Gold Delta tables
+- Support modular execution as a Databricks Workflow task
+- Route recoverable referential failures to quarantine instead of failing the whole Gold job when appropriate
 
 ## Join Strategy Guidance
 
@@ -62,12 +74,13 @@ fact_df.join(
 
 ## Recommended Build Pattern
 
-1. Read the source transaction table at the required grain.
+1. Read the source transaction table from `retailpulse.silver` at the required grain.
 2. Preserve one row per business transaction.
 3. Resolve each dimension using the appropriate join mode.
 4. Select surrogate keys where available.
 5. Keep measures and degenerate transaction identifiers in the fact.
-6. Write the result to a gold Delta table.
+6. Write the result to a Gold Delta table.
+7. Publish unresolved rows to a quarantine table when the failure is operationally recoverable.
 
 ## Modeling Notes
 
@@ -75,8 +88,7 @@ fact_df.join(
 - If a dimension does not yet have a surrogate key, use the natural key temporarily and document the limitation.
 - Do not accidentally duplicate fact rows through non-unique dimension joins.
 - Validate the final row count against the expected transaction grain.
-- For this project's DLT build, use inner joins for curated fact output and a separate left-join quarantine flow for unresolved dimension matches.
-- Prefer quarantine tables over `expect_or_fail` for recoverable data quality issues such as missing dimension matches.
+- Prefer batch-job quarantine handling over DLT ownership for Gold facts in enterprise production designs.
 
 ## Target Examples
 
@@ -89,10 +101,5 @@ fact_df.join(
 - No unexpected row multiplication after joins
 - Surrogate keys populated where available
 - Fact measures such as `quantity`, `price`, and derived amounts are not null when expected
-- Output written as Delta in the gold layer
-
-DLT notes for this project:
-
-- Curated DLT fact output: `retailpulse.dlt.fact_sales_dlt`
-- Quarantine output: `retailpulse.dlt.fact_sales_quarantine`
-- Missing `product_sk`, `customer_id`, or `date_id` should be preserved in quarantine with `dq_reason` rather than aborting the whole pipeline
+- Output written as Delta in the Gold layer
+- Quarantine rows include a usable `dq_reason` when generated

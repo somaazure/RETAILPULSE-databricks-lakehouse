@@ -1,0 +1,20 @@
+{
+  "name": "RetailPulse Enterprise Bronze Silver DLT",
+  "catalog": "retailpulse",
+  "target": "ops",
+  "continuous": false,
+  "development": true,
+  "serverless": true,
+  "photon": true,
+  "channel": "CURRENT",
+  "configuration": {
+    "pipelines.enableTrackHistory": "true"
+  },
+  "libraries": [
+    {
+      "notebook": {
+        "path": "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/08_dlt_e2e_main_refresh"
+      }
+    }
+  ]
+}

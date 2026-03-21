@@ -7,14 +7,14 @@ RetailPulse is a Databricks Lakehouse project built on Unity Catalog with a meda
 - Platform: Databricks Lakehouse
 - Catalog: `retailpulse`
 - Storage pattern: Unity Catalog volumes for landed files and Delta tables for curated layers
-- Processing pattern: Auto Loader ingestion plus batch transformations, with a DLT quality pipeline for curated validation and quarantine handling
+- Processing pattern: Auto Loader ingestion plus batch transformations, coordinated through DLT and Databricks Jobs
 
 ## Layers
 
 - Bronze: raw orders ingestion from a Unity Catalog volume into Delta
 - Silver: validated and deduplicated business-ready tables
 - Gold: dimensional and fact tables for analytics
-- DLT target schema: DLT-managed quality tables in `retailpulse.dlt`
+- Ops: quarantine tables for rejected or unresolved records
 
 ## Source And Ingestion
 
@@ -26,10 +26,9 @@ Auto Loader ingests those files into:
 
 `retailpulse.bronze.orders`
 
-The bronze ingestion process also stores:
+The bronze ingestion process also stores schema inference and checkpoint state under:
 
-- schema inference state in `/Volumes/retailpulse/bronze/orders_files/checkpoints/orders_schema`
-- checkpoint state in `/Volumes/retailpulse/bronze/orders_files/checkpoints/bronze_orders`
+`/Volumes/retailpulse/bronze/orders_files/checkpoints/`
 
 ## Table Relationships
 
@@ -127,11 +126,8 @@ The bronze ingestion process also stores:
 - `retailpulse.gold.dim_customer` stores one row per customer derived from silver orders.
 - `retailpulse.gold.dim_date` stores one row per calendar date derived from silver order timestamps.
 - `retailpulse.gold.fact_sales` stores sales transactions joined to the gold dimensions.
-- `retailpulse.dlt.silver_orders_dlt` stores DLT-curated silver orders that passed enforced silver-quality filters.
-- `retailpulse.dlt.silver_orders_quarantine` stores rejected silver-order rows with `dq_reason`.
-- `retailpulse.dlt.dim_product_current_dlt`, `retailpulse.dlt.dim_customer_dlt`, `retailpulse.dlt.dim_date_dlt`, and `retailpulse.dlt.silver_products_dlt` store DLT-managed validated views of the core dimensions and product source.
-- `retailpulse.dlt.fact_sales_dlt` stores only fully resolved fact rows that successfully join to all required dimensions.
-- `retailpulse.dlt.fact_sales_quarantine` stores unresolved fact rows, such as missing product/date/customer matches, with `dq_reason`.
+- `retailpulse.ops.silver_orders_quarantine` stores rejected Silver-order rows with `dq_reason`.
+- `retailpulse.ops.fact_sales_quarantine` stores unresolved fact rows, such as missing product/date/customer matches, with `dq_reason`.
 
 ## Relationship Summary
 
@@ -158,50 +154,64 @@ The bronze ingestion process also stores:
 - Unity Catalog for table governance and volumes
 - Auto Loader for file-based incremental ingestion
 - Lakeflow / Delta Live Tables for data quality enforcement, observability, and quarantine-style exception handling
+- Databricks Jobs for Gold-layer orchestration and batch processing
 - SCD Type 2 for dimensional history tracking
 
 ## DLT Quality Pattern
 
-- DLT notebook: `notebooks/06_dlt_pipeline.py`
-- DLT config: `config/dlt_pipeline_config.json`
-- Pipeline type: triggered serverless DLT pipeline targeting `retailpulse.dlt`
+- DLT notebook: `notebooks/08_dlt_e2e_main_refresh.py`
+- DLT config: `config/dlt_bronze_silver_pipeline.json`
+- Pipeline type: triggered serverless DLT pipeline for Bronze and Silver
 - Sync helper: `sync_to_workspace.ps1`
 
 Current DLT design choices:
 
-- `silver_orders_dlt` reads the persisted bronze Delta table in batch mode, not stream mode.
-- This was chosen because the current silver dedup pattern uses an aggregate plus join-back-to-source, which is simpler and more reliable in triggered batch DLT than in streaming mode.
-- `silver_orders_quarantine` is the operational bucket for invalid silver rows.
-- `fact_sales_dlt` uses inner joins to dimensions so only fully resolved facts land in the curated DLT fact table.
-- `fact_sales_quarantine` uses left joins and captures unresolved rows for remediation instead of failing the entire pipeline.
-- Soft `@dlt.expect(...)` checks record quality metrics without rejecting rows.
-- Enforced filtering is handled either through explicit transformation filters or quarantine routing.
+- DLT handles ingestion, schema evolution, and data quality for Bronze and Silver.
+- `retailpulse.bronze.orders` is ingested from the Unity Catalog volume using Auto Loader.
+- `retailpulse.silver.orders` applies validation, casting, and deduplication.
+- `retailpulse.ops.silver_orders_quarantine` stores invalid Silver rows with `dq_reason`.
+- Gold dimensional modeling and fact creation are handled outside DLT in batch jobs.
+
+## Pipeline Orchestration Strategy
+
+A lightweight orchestrator job coordinates the full pipeline execution.
+
+- Task 1: trigger the DLT pipeline in triggered mode to process Bronze and Silver for streaming ingestion and data quality handling.
+- Task 2: trigger the Gold-layer Databricks job to build `dim_product` with SCD Type 2, `dim_customer`, `dim_date`, and `fact_sales`.
+
+Execution behavior:
+
+- DLT handles ingestion, schema evolution, and data quality for Bronze and Silver.
+- The Gold job handles dimensional modeling and fact table creation using batch processing.
+- Tasks run sequentially with dependency, so Gold starts only after the DLT task completes successfully.
+
+Benefits:
+
+- modular pipeline design
+- independent scalability
+- better failure isolation
+- flexible scheduling
 
 ## Final Execution Steps
 
-Run the notebooks in this order in Databricks:
+Run the pipeline in this order in Databricks:
 
-1. `01_data_generator.py`
-   - Continuously creates synthetic order CSV files in the Unity Catalog volume.
+1. Orchestrator job
+   - Triggers the Bronze/Silver DLT pipeline first.
+   - Triggers the Gold batch job only after DLT succeeds.
 
-2. `02_bronze_ingestion.py`
-   - Ingests available order files from the volume into `retailpulse.bronze.orders` using Auto Loader and `availableNow`.
+2. DLT pipeline task
+   - Ingests files into `retailpulse.bronze.orders`
+   - Cleans and deduplicates into `retailpulse.silver.orders`
+   - Captures invalid Silver rows in `retailpulse.ops.silver_orders_quarantine`
 
-3. `03_silver_transform.py`
-   - Cleans, validates, casts, and deduplicates bronze orders into `retailpulse.silver.orders`.
-
-4. `04_dim_tables.py`
+3. Gold batch job
    - Builds `retailpulse.silver.products`
    - Maintains `retailpulse.gold.dim_product`
    - Builds `retailpulse.gold.dim_customer`
    - Builds `retailpulse.gold.dim_date`
-
-5. `05_fact_tables.py`
-   - Joins `retailpulse.silver.orders` to the gold dimensions and writes `retailpulse.gold.fact_sales`.
-
-6. `06_dlt_pipeline.py`
-   - Builds DLT-managed curated and quarantine tables in `retailpulse.dlt`
-   - Applies data quality expectations and captures rejects for remediation
+   - Builds `retailpulse.gold.fact_sales`
+   - Captures unresolved facts in `retailpulse.ops.fact_sales_quarantine`
 
 ## Validation Queries
 
@@ -210,14 +220,13 @@ Use these checks after the pipeline runs:
 ```sql
 SELECT COUNT(*) FROM retailpulse.bronze.orders;
 SELECT COUNT(*) FROM retailpulse.silver.orders;
+SELECT COUNT(*) FROM retailpulse.silver.products;
 SELECT COUNT(*) FROM retailpulse.gold.dim_product;
 SELECT COUNT(*) FROM retailpulse.gold.dim_customer;
 SELECT COUNT(*) FROM retailpulse.gold.dim_date;
 SELECT COUNT(*) FROM retailpulse.gold.fact_sales;
-SELECT COUNT(*) FROM retailpulse.dlt.silver_orders_dlt;
-SELECT COUNT(*) FROM retailpulse.dlt.silver_orders_quarantine;
-SELECT COUNT(*) FROM retailpulse.dlt.fact_sales_dlt;
-SELECT COUNT(*) FROM retailpulse.dlt.fact_sales_quarantine;
+SELECT COUNT(*) FROM retailpulse.ops.silver_orders_quarantine;
+SELECT COUNT(*) FROM retailpulse.ops.fact_sales_quarantine;
 ```
 
 ## Current Scope
@@ -232,7 +241,8 @@ Implemented:
 - `dim_customer`
 - `dim_date`
 - `fact_sales`
-- DLT quality pipeline with curated and quarantine outputs
+- DLT Bronze/Silver pipeline with quarantine handling
+- orchestrator-based enterprise workflow
 
 Potential next enhancements:
 

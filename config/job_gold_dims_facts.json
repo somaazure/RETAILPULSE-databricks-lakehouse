@@ -1,0 +1,51 @@
+{
+  "name": "RetailPulse Gold Dims Facts Job",
+  "tasks": [
+    {
+      "task_key": "product_master",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/09_product_master"
+      }
+    },
+    {
+      "task_key": "dim_product",
+      "depends_on": [
+        {
+          "task_key": "product_master"
+        }
+      ],
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/10_dim_product"
+      }
+    },
+    {
+      "task_key": "dim_customer",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/11_dim_customer"
+      }
+    },
+    {
+      "task_key": "dim_date",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/12_dim_date"
+      }
+    },
+    {
+      "task_key": "fact_sales",
+      "depends_on": [
+        {
+          "task_key": "dim_product"
+        },
+        {
+          "task_key": "dim_customer"
+        },
+        {
+          "task_key": "dim_date"
+        }
+      ],
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/13_fact_sales"
+      }
+    }
+  ]
+}
