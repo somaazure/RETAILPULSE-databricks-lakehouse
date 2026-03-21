@@ -1,0 +1,22 @@
+{
+  "name": "RetailPulse Enterprise Orchestrator",
+  "tasks": [
+    {
+      "task_key": "bronze_silver_dlt",
+      "pipeline_task": {
+        "pipeline_id": "44aa85ea-ed99-41d9-9f1b-f17754ce6094"
+      }
+    },
+    {
+      "task_key": "gold_dims_facts",
+      "depends_on": [
+        {
+          "task_key": "bronze_silver_dlt"
+        }
+      ],
+      "run_job_task": {
+        "job_id": 769000816655515
+      }
+    }
+  ]
+}

@@ -1,132 +1,109 @@
 # RetailPulse Runbook
 
-This runbook documents the Databricks operational assets created for RetailPulse and when to use each one.
+This runbook documents the enterprise-hybrid operating model implemented on this branch.
 
 ## Workspace Path
 
-Project workspace folder:
-
 `/Workspace/Users/shekartelstra@gmail.com/RetailPulse`
 
-## Primary DLT Pipeline
+## Enterprise Bronze/Silver DLT
 
-Name: `RetailPulse DLT Quality Pipeline`
+Config file:
 
-Pipeline ID: `0099e0a1-8d57-42d5-9ea6-36984f54c13f`
-
-Notebook:
-
-`/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/archive/06_dlt_pipeline`
-
-Purpose:
-
-- current working DLT pipeline for quality validation
-- writes curated and quarantine outputs into `retailpulse.dlt`
-- safe for experimentation because it does not replace the main curated tables
-
-Use when:
-
-- you want DLT-based DQ checks
-- you want quarantine outputs without changing the existing main silver and gold table owners
-- you want to inspect quality metrics and rejected records safely
-
-Key outputs:
-
-- `retailpulse.dlt.silver_orders_dlt`
-- `retailpulse.dlt.silver_orders_quarantine`
-- `retailpulse.dlt.fact_sales_dlt`
-- `retailpulse.dlt.fact_sales_quarantine`
-
-## Future Prod Cutover DLT Pipeline
-
-Name: `RetailPulse Main Curated DLT Future Cutover`
-
-Pipeline ID: `20d2e45a-5d08-4066-a3e9-4f268f5017da`
+`config/dlt_bronze_silver_pipeline.json`
 
 Notebook:
 
-`/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/archive/07_dlt_main_tables`
+`/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/08_dlt_e2e_main_refresh`
 
 Purpose:
 
-- future production cutover template
-- designed for DLT to own main curated tables directly
-- writes curated outputs to the main schemas and quarantine outputs to operational schemas
+- DLT owns Bronze ingestion
+- DLT owns Silver curation and Silver quarantine
+- this is the only DLT layer in the enterprise model
 
-Target outputs:
+Outputs:
 
+- `retailpulse.bronze.orders`
 - `retailpulse.silver.orders`
-- `retailpulse.gold.fact_sales`
 - `retailpulse.ops.silver_orders_quarantine`
+
+## Modular Gold Jobs
+
+Notebook assets:
+
+- `/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/09_product_master`
+- `/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/10_dim_product`
+- `/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/11_dim_customer`
+- `/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/12_dim_date`
+- `/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/13_fact_sales`
+
+Purpose:
+
+- keep Gold logic modular and independently rerunnable
+- separate product mastering, SCD2 maintenance, dimensions, and fact loads
+- keep fact quarantine in the Gold job layer
+
+Gold outputs:
+
+- `retailpulse.silver.products`
+- `retailpulse.gold.dim_product`
+- `retailpulse.gold.dim_customer`
+- `retailpulse.gold.dim_date`
+- `retailpulse.gold.fact_sales`
 - `retailpulse.ops.fact_sales_quarantine`
 
-Use when:
+## Enterprise Workflow Template
 
-- you are ready to retire notebook-based writers for `retailpulse.silver.orders` and `retailpulse.gold.fact_sales`
-- you want DLT to become the single writer for main curated production tables
+Config file:
 
-Important:
-
-- do not run this cutover pipeline while the notebook-based flow is still writing the same main curated tables
-- one production table should have only one active writer
-
-## End-To-End Job
-
-Name: `RetailPulse End-to-End Workflow`
-
-Job ID: `454806619496303`
-
-Purpose:
-
-- runs the notebook flow end to end and then triggers the current DLT quality pipeline
-- manual execution only for now; no schedule configured
+`config/job_enterprise_hybrid_workflow.json`
 
 Task order:
 
-1. `01_data_generator`
-2. `02_bronze_ingestion`
-3. `03_silver_transform`
-4. `04_dim_tables`
-5. `05_fact_tables`
-6. `06_dlt_pipeline` through the DLT pipeline task
+1. `00_generate_orders_once`
+2. Bronze/Silver DLT pipeline task
+3. `09_product_master`
+4. `10_dim_product`
+5. `11_dim_customer`
+6. `12_dim_date`
+7. `13_fact_sales`
 
-Run manually from CLI:
+Important:
 
-```powershell
-databricks jobs run-now 454806619496303 --profile shekartelstra
-```
+- update the placeholder pipeline id in the job config before creating the job
+- this template is intentionally modular so dim jobs can be rerun independently when needed
 
-## Config Files
+## One-Time Ownership Cutover
 
-Local config files in this repo:
+If the workspace currently has DLT-managed materialized views from the older one-click branch, do not point the enterprise Gold notebooks at those same table names until DLT ownership is retired.
 
-- `config/dlt_pipeline_config.json`
-- `config/dlt_main_tables_pipeline_config.json`
-- `config/job_retailpulse_e2e.json`
+Tables to review before first enterprise run:
 
-## Recommended Operating Model
+- `retailpulse.silver.products`
+- `retailpulse.gold.dim_product`
+- `retailpulse.gold.dim_customer`
+- `retailpulse.gold.dim_date`
+- `retailpulse.gold.fact_sales`
+- `retailpulse.ops.fact_sales_quarantine`
 
-Current recommended model:
+Recommended sequence:
 
-- use the notebook flow plus the current DLT quality pipeline
-- keep `retailpulse.dlt` as the DLT validation and quarantine schema
-- use quarantine tables for troubleshooting and replay planning
+1. back up current tables if needed
+2. stop the older full-DLT refresh flow
+3. drop the DLT-managed Gold objects
+4. run the enterprise-hybrid Gold notebooks so they recreate standard Delta tables
 
-Future production model:
+## Archive
 
-- cut over to the main curated DLT pipeline only after retiring the notebook-based writers for the same tables
-- keep quarantine tables in `retailpulse.ops`
-- use DLT as the single owner of main curated tables
+Older notebook variants are preserved under:
+
+`/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/archive`
+
+These remain useful for portfolio demos, learning comparisons, and migration reference.
 
 ## Sync Command
-
-Sync latest repo changes to the Databricks workspace:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\sync_to_workspace.ps1
 ```
-
-
-Superseded older template pipeline ID: ec8f9260-6537-4d58-81f1-04e5cc4d1723 (do not use).
-
-
