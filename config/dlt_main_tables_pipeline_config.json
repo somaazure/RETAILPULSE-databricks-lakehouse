@@ -1,12 +1,12 @@
 {
-  "name": "RetailPulse Main Curated DLT Pipeline Template",
+  "name": "RetailPulse Main Curated DLT Future Cutover",
   "development": true,
   "continuous": false,
   "channel": "CURRENT",
   "photon": true,
   "serverless": true,
   "catalog": "retailpulse",
-  "target": "dlt",
+  "target": "ops",
   "libraries": [
     {
       "notebook": {

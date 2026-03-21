@@ -39,9 +39,9 @@ Key outputs:
 
 ## Future Prod Cutover DLT Pipeline
 
-Name: `RetailPulse Main Curated DLT Pipeline Template`
+Name: `RetailPulse Main Curated DLT Future Cutover`
 
-Pipeline ID: `ec8f9260-6537-4d58-81f1-04e5cc4d1723`
+Pipeline ID: `20d2e45a-5d08-4066-a3e9-4f268f5017da`
 
 Notebook:
 
@@ -125,3 +125,7 @@ Sync latest repo changes to the Databricks workspace:
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\sync_to_workspace.ps1
 ```
+
+
+Superseded older template pipeline ID: ec8f9260-6537-4d58-81f1-04e5cc4d1723 (do not use).
+
