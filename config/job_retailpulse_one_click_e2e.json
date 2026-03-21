@@ -1,0 +1,26 @@
+{
+  "name": "RetailPulse One-Click End-to-End Refresh",
+  "max_concurrent_runs": 1,
+  "tasks": [
+    {
+      "task_key": "generate_orders_once",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/00_generate_orders_once",
+        "source": "WORKSPACE"
+      }
+    },
+    {
+      "task_key": "run_e2e_main_refresh_dlt",
+      "depends_on": [
+        {
+          "task_key": "generate_orders_once"
+        }
+      ],
+      "pipeline_task": {
+        "full_refresh": false,
+        "pipeline_id": "99ef93ec-11b0-4a49-b390-1112f1c74056"
+      }
+    }
+  ]
+}
+

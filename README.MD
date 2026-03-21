@@ -113,19 +113,19 @@ powershell -ExecutionPolicy Bypass -File .\sync_to_workspace.ps1
 
 Run these notebooks in Databricks in the following order:
 
-1. `notebooks/01_data_generator.py`
+1. `notebooks/archive/01_data_generator.py`
    Generates synthetic order CSV files into the Unity Catalog volume.
 
-2. `notebooks/02_bronze_ingestion.py`
+2. `notebooks/archive/02_bronze_ingestion.py`
    Uses Auto Loader to ingest the landed files into `retailpulse.bronze.orders`.
 
-3. `notebooks/03_silver_transform.py`
+3. `notebooks/archive/03_silver_transform.py`
    Cleans, casts, validates, and deduplicates records into `retailpulse.silver.orders`.
 
-4. `notebooks/04_dim_tables.py`
+4. `notebooks/archive/04_dim_tables.py`
    Builds `retailpulse.silver.products`, maintains `retailpulse.gold.dim_product`, and creates `dim_customer` and `dim_date`.
 
-5. `notebooks/05_fact_tables.py`
+5. `notebooks/archive/05_fact_tables.py`
    Creates `retailpulse.gold.fact_sales` from silver orders and gold dimensions.
 
 ### Step 3: Create And Run The DLT Pipeline
@@ -148,7 +148,7 @@ Notes:
 
 - the DLT pipeline is configured for serverless compute
 - the DLT target schema is `retailpulse.dlt`
-- the DLT notebook is `notebooks/06_dlt_pipeline.py`
+- the DLT notebook is `notebooks/archive/06_dlt_pipeline.py`
 - base medallion tables must exist before the DLT pipeline is run
 
 ## How The DLT Layer Works
@@ -227,3 +227,4 @@ See `.ai/skills/README.md` for sample prompts and end-to-end usage guidance.
 GitHub repository:
 
 `https://github.com/somaazure/RETAILPULSE-databricks-lakehouse`
+

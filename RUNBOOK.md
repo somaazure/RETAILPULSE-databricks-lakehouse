@@ -16,7 +16,7 @@ Pipeline ID: `0099e0a1-8d57-42d5-9ea6-36984f54c13f`
 
 Notebook:
 
-`/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/06_dlt_pipeline`
+`/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/archive/06_dlt_pipeline`
 
 Purpose:
 
@@ -45,7 +45,7 @@ Pipeline ID: `20d2e45a-5d08-4066-a3e9-4f268f5017da`
 
 Notebook:
 
-`/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/07_dlt_main_tables`
+`/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/archive/07_dlt_main_tables`
 
 Purpose:
 
@@ -128,4 +128,5 @@ powershell -ExecutionPolicy Bypass -File .\sync_to_workspace.ps1
 
 
 Superseded older template pipeline ID: ec8f9260-6537-4d58-81f1-04e5cc4d1723 (do not use).
+
 
