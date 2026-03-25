@@ -41,39 +41,29 @@ flowchart LR
 RetailPulse/
 |-- notebooks/
 |   |-- 00_generate_orders_once.py
-|   |-- 08_dlt_e2e_main_refresh.py      # Bronze + Silver DLT in this branch
+|   |-- 08_dlt_e2e_main_refresh.py      # Bronze + Silver DLT
 |   |-- 09_product_master.py
 |   |-- 10_dim_product.py
 |   |-- 11_dim_customer.py
 |   |-- 12_dim_date.py
 |   |-- 13_fact_sales.py
 |   `-- archive/
-|       |-- 01_data_generator.py
-|       |-- 02_bronze_ingestion.py
-|       |-- 03_silver_transform.py
-|       |-- 04_dim_tables.py
-|       |-- 05_fact_tables.py
-|       |-- 06_dlt_pipeline.py
-|       `-- 07_dlt_main_tables.py
 |-- config/
 |   |-- dlt_bronze_silver_pipeline.json
-|   `-- job_enterprise_hybrid_workflow.json
+|   |-- job_gold_dims_facts.json
+|   |-- job_enterprise_orchestrator.json
+|   `-- archive/
 |-- .ai/
 |-- src/utils/
 `-- sync_to_workspace.ps1
 ```
 
-## Enterprise Build Flow
+## Active Enterprise Build Flow
 
 1. Run [00_generate_orders_once.py](c:/Knowledge/2026_GenAI/RetailPulse/notebooks/00_generate_orders_once.py) to land a new order batch.
 2. Run the DLT pipeline from [dlt_bronze_silver_pipeline.json](c:/Knowledge/2026_GenAI/RetailPulse/config/dlt_bronze_silver_pipeline.json).
-3. Run Gold job notebooks in order:
-   - [09_product_master.py](c:/Knowledge/2026_GenAI/RetailPulse/notebooks/09_product_master.py)
-   - [10_dim_product.py](c:/Knowledge/2026_GenAI/RetailPulse/notebooks/10_dim_product.py)
-   - [11_dim_customer.py](c:/Knowledge/2026_GenAI/RetailPulse/notebooks/11_dim_customer.py)
-   - [12_dim_date.py](c:/Knowledge/2026_GenAI/RetailPulse/notebooks/12_dim_date.py)
-   - [13_fact_sales.py](c:/Knowledge/2026_GenAI/RetailPulse/notebooks/13_fact_sales.py)
-4. Orchestrate them together with [job_enterprise_hybrid_workflow.json](c:/Knowledge/2026_GenAI/RetailPulse/config/job_enterprise_hybrid_workflow.json).
+3. Run the Gold batch job from [job_gold_dims_facts.json](c:/Knowledge/2026_GenAI/RetailPulse/config/job_gold_dims_facts.json).
+4. Or use the orchestrator job from [job_enterprise_orchestrator.json](c:/Knowledge/2026_GenAI/RetailPulse/config/job_enterprise_orchestrator.json) to run both in sequence.
 
 ## Enterprise Assets
 
@@ -94,7 +84,7 @@ RetailPulse/
 
 ## One-Time Cutover Note
 
-If your workspace currently has Gold tables created by the old one-click DLT branch, those tables are DLT-managed materialized views. Before running the enterprise-hybrid Gold notebooks against the same table names, retire that old DLT ownership first.
+If your workspace currently has Gold tables created by the old one-click DLT branch, those tables are DLT-managed materialized views. Before running the enterprise Gold notebooks against the same table names, retire that old DLT ownership first.
 
 Practically, that means:
 
@@ -111,13 +101,21 @@ Practically, that means:
 databricks pipelines create --json @config/dlt_bronze_silver_pipeline.json --profile shekartelstra
 ```
 
-## Create The Enterprise Hybrid Workflow Job
-
-Update the placeholder pipeline id in [job_enterprise_hybrid_workflow.json](c:/Knowledge/2026_GenAI/RetailPulse/config/job_enterprise_hybrid_workflow.json), then create the job:
+## Create The Gold Job
 
 ```powershell
-databricks jobs create --json @config/job_enterprise_hybrid_workflow.json --profile shekartelstra
+databricks jobs create --json @config/job_gold_dims_facts.json --profile shekartelstra
 ```
+
+## Create The Orchestrator Job
+
+```powershell
+databricks jobs create --json @config/job_enterprise_orchestrator.json --profile shekartelstra
+```
+
+## Archive
+
+Legacy pipeline and job creation files are preserved under [archive](c:/Knowledge/2026_GenAI/RetailPulse/config/archive).
 
 ## Validation Queries
 

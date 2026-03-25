@@ -1,10 +1,16 @@
+# Databricks notebook source
+dbutils.fs.ls("/Volumes/retailpulse/bronze/orders_files/checkpoints/dlt_orders_schema_business_ts")
+#/Volumes/retailpulse/bronze/orders_files/checkpoints/dlt_orders_schema_business_ts
+
+# COMMAND ----------
+
 """Enterprise hybrid DLT pipeline for Bronze and Silver only."""
 
 import dlt
 from pyspark.sql import functions as F
 
-SOURCE_PATH = "/Volumes/retailpulse/bronze/orders_files/orders/"
-SCHEMA_LOCATION = "/Volumes/retailpulse/bronze/orders_files/checkpoints/dlt_orders_schema"
+SOURCE_PATH = "/Volumes/retailpulse/bronze/orders_files/orders_business_ts/"
+SCHEMA_LOCATION = "/Volumes/retailpulse/bronze/orders_files/checkpoints/dlt_orders_schema_business_ts"
 
 BRONZE_ORDERS_TABLE = "retailpulse.bronze.orders"
 SILVER_ORDERS_TABLE = "retailpulse.silver.orders"
@@ -22,6 +28,7 @@ def bronze_orders_main():
         .option("cloudFiles.inferColumnTypes", "true")
         .option("cloudFiles.schemaLocation", SCHEMA_LOCATION)
         .option("cloudFiles.schemaEvolutionMode", "addNewColumns")
+        .option("cloudFiles.schemaHints", "order_timestamp STRING")
         .option("cloudFiles.rescuedDataColumn", "_rescued_data")
         .option("header", "true")
         .load(SOURCE_PATH)
@@ -31,6 +38,7 @@ def bronze_orders_main():
             F.col("product_id"),
             F.col("quantity"),
             F.col("price"),
+            F.col("order_timestamp"),
             F.col("_rescued_data"),
             F.col("_metadata.file_path").alias("source_file_name"),
             F.current_timestamp().alias("ingest_ts"),
@@ -48,6 +56,7 @@ def silver_orders_standardized_enterprise_internal():
         F.col("product_id").cast("int").alias("product_id"),
         F.col("quantity").cast("int").alias("quantity"),
         F.col("price").cast("decimal(12,2)").alias("price"),
+        F.col("order_timestamp").cast("timestamp").alias("order_timestamp"),
         F.col("source_file_name").cast("string").alias("source_file_name"),
         F.col("ingest_ts").alias("ingest_ts"),
         F.col("_rescued_data").cast("string").alias("_rescued_data"),
@@ -67,6 +76,8 @@ def silver_orders_curated_enterprise_internal():
         & (F.col("quantity") > 0)
         & F.col("price").isNotNull()
         & (F.col("price") > 0)
+        & F.col("order_timestamp").isNotNull()
+        & (F.col("order_timestamp") <= F.current_timestamp())
         & F.col("ingest_ts").isNotNull()
         & (F.col("ingest_ts") <= F.current_timestamp())
         & F.col("_rescued_data").isNull()
@@ -92,6 +103,7 @@ def silver_orders_curated_enterprise_internal():
             F.col("orders.product_id"),
             F.col("orders.quantity"),
             F.col("orders.price"),
+            F.col("orders.order_timestamp"),
             F.col("orders.source_file_name"),
             F.col("orders.ingest_ts"),
         )
@@ -110,7 +122,8 @@ def silver_orders_curated_enterprise_internal():
         "valid_product_id": "product_id IS NOT NULL",
         "valid_quantity": "quantity IS NOT NULL AND quantity > 0",
         "valid_price": "price IS NOT NULL AND price > 0",
-        "valid_ingest_ts": "ingest_ts IS NOT NULL AND ingest_ts <= current_timestamp()",
+        "valid_order_timestamp": "order_timestamp IS NOT NULL AND order_timestamp <= current_timestamp()",
+        "valid_ingest_ts": "ingest_ts IS NOT NULL AND ingest_ts <= current_timestamp()"
     }
 )
 def silver_orders_main():
@@ -133,6 +146,8 @@ def silver_orders_quarantine_main():
         | (F.col("quantity") <= 0)
         | F.col("price").isNull()
         | (F.col("price") <= 0)
+        | F.col("order_timestamp").isNull()
+        | (F.col("order_timestamp") > F.current_timestamp())
         | F.col("ingest_ts").isNull()
         | (F.col("ingest_ts") > F.current_timestamp())
         | F.col("_rescued_data").isNotNull()
@@ -147,6 +162,10 @@ def silver_orders_quarantine_main():
             F.when(F.col("product_id").isNull(), F.lit("missing_product_id")),
             F.when(F.col("quantity").isNull() | (F.col("quantity") <= 0), F.lit("invalid_quantity")),
             F.when(F.col("price").isNull() | (F.col("price") <= 0), F.lit("invalid_price")),
+            F.when(
+                F.col("order_timestamp").isNull() | (F.col("order_timestamp") > F.current_timestamp()),
+                F.lit("invalid_order_timestamp"),
+            ),
             F.when(
                 F.col("ingest_ts").isNull() | (F.col("ingest_ts") > F.current_timestamp()),
                 F.lit("invalid_ingest_ts"),

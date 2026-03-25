@@ -1,3 +1,4 @@
+# Databricks notebook source
 """Build a deterministic product master in Silver for enterprise Gold jobs."""
 
 from pyspark.sql import SparkSession
