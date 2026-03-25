@@ -1,3 +1,4 @@
+# Databricks notebook source
 """Build the date dimension from curated Silver orders."""
 
 from pyspark.sql import SparkSession
@@ -13,8 +14,8 @@ spark.sql("CREATE SCHEMA IF NOT EXISTS retailpulse.gold")
 
 dim_date_df = (
     spark.table(SILVER_ORDERS_TABLE)
-    .filter(F.col("ingest_ts").isNotNull())
-    .select(F.to_date(F.col("ingest_ts")).alias("full_date"))
+    .filter(F.col("order_timestamp").isNotNull())
+    .select(F.to_date(F.col("order_timestamp")).alias("full_date"))
     .dropDuplicates(["full_date"])
     .select(
         F.date_format(F.col("full_date"), "yyyyMMdd").cast("int").alias("date_id"),

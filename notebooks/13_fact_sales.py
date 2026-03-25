@@ -1,3 +1,4 @@
+# Databricks notebook source
 """Build the sales fact and Gold-layer quarantine table from curated dimensions."""
 
 from pyspark.sql import SparkSession
@@ -39,7 +40,7 @@ joined_df = (
     )
     .join(
         dim_date_df,
-        F.to_date(F.col("orders.ingest_ts")) == F.col("dim_date.full_date"),
+        F.to_date(F.col("orders.order_timestamp")) == F.col("dim_date.full_date"),
         "left",
     )
     .select(
@@ -51,7 +52,7 @@ joined_df = (
         F.col("orders.quantity").alias("quantity"),
         F.col("orders.price").alias("price"),
         (F.col("orders.quantity") * F.col("orders.price")).alias("sales_amount"),
-        F.col("orders.ingest_ts").alias("order_ts"),
+        F.col("orders.order_timestamp").alias("order_ts"),
     )
     .dropDuplicates(["order_id"])
 )

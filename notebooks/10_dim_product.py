@@ -1,3 +1,4 @@
+# Databricks notebook source
 """Maintain the SCD2 product dimension from the Silver product master."""
 
 from pyspark.sql import SparkSession
