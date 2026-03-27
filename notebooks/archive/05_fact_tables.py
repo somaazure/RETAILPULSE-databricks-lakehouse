@@ -1,3 +1,4 @@
+# Databricks notebook source
 """Build the RetailPulse sales fact table."""
 
 from pyspark.sql import DataFrame, SparkSession

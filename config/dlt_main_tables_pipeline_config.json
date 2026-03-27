@@ -1,0 +1,21 @@
+{
+  "name": "RetailPulse Main Curated DLT Future Cutover",
+  "development": true,
+  "continuous": false,
+  "channel": "CURRENT",
+  "photon": true,
+  "serverless": true,
+  "catalog": "retailpulse",
+  "target": "ops",
+  "libraries": [
+    {
+      "notebook": {
+        "path": "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/archive/07_dlt_main_tables"
+      }
+    }
+  ],
+  "configuration": {
+    "pipelines.enableTrackHistory": "true"
+  }
+}
+

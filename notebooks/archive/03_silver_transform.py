@@ -1,3 +1,4 @@
+# Databricks notebook source
 """Silver transformation pipeline for RetailPulse orders."""
 
 from pyspark.sql import DataFrame, SparkSession

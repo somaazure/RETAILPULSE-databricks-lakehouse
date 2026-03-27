@@ -1,0 +1,74 @@
+{
+  "name": "RetailPulse End-to-End Workflow",
+  "max_concurrent_runs": 1,
+  "tasks": [
+    {
+      "task_key": "generate_orders",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/archive/01_data_generator",
+        "source": "WORKSPACE"
+      }
+    },
+    {
+      "task_key": "bronze_ingestion",
+      "depends_on": [
+        {
+          "task_key": "generate_orders"
+        }
+      ],
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/archive/02_bronze_ingestion",
+        "source": "WORKSPACE"
+      }
+    },
+    {
+      "task_key": "silver_transform",
+      "depends_on": [
+        {
+          "task_key": "bronze_ingestion"
+        }
+      ],
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/archive/03_silver_transform",
+        "source": "WORKSPACE"
+      }
+    },
+    {
+      "task_key": "build_dimensions",
+      "depends_on": [
+        {
+          "task_key": "silver_transform"
+        }
+      ],
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/archive/04_dim_tables",
+        "source": "WORKSPACE"
+      }
+    },
+    {
+      "task_key": "build_fact_sales",
+      "depends_on": [
+        {
+          "task_key": "build_dimensions"
+        }
+      ],
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/archive/05_fact_tables",
+        "source": "WORKSPACE"
+      }
+    },
+    {
+      "task_key": "run_dlt_quality_pipeline",
+      "depends_on": [
+        {
+          "task_key": "build_fact_sales"
+        }
+      ],
+      "pipeline_task": {
+        "pipeline_id": "0099e0a1-8d57-42d5-9ea6-36984f54c13f",
+        "full_refresh": false
+      }
+    }
+  ]
+}
+
