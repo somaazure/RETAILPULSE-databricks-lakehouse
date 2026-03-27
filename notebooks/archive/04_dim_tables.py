@@ -1,3 +1,4 @@
+# Databricks notebook source
 """Create and maintain RetailPulse dimension tables."""
 
 from decimal import Decimal

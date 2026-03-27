@@ -1,3 +1,4 @@
+# Databricks notebook source
 """Production-cutover DLT pipeline template for RetailPulse main curated tables.
 
 This pipeline is a safe cutover template for Option 1, where DLT owns the main curated

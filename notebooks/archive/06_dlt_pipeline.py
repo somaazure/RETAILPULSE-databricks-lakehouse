@@ -1,3 +1,4 @@
+# Databricks notebook source
 """Delta Live Tables pipeline for RetailPulse with data quality checks."""
 
 import dlt

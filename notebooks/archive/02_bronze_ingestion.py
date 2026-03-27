@@ -1,3 +1,4 @@
+# Databricks notebook source
 """Bronze ingestion pipeline for RetailPulse orders using Databricks Auto Loader."""
 
 from pyspark.sql import SparkSession

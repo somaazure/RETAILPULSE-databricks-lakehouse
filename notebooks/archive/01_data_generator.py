@@ -1,3 +1,4 @@
+# Databricks notebook source
 """Generate synthetic RetailPulse order CSV files on a fixed interval.
 
 This script is intended for use in Databricks. It continuously writes small
