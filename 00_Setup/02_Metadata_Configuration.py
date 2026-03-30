@@ -27,6 +27,11 @@
 # MAGIC - `dim_product` - Product dimension
 # MAGIC - `dim_date` - Date dimension
 # MAGIC
+# MAGIC **Phase 1 Additions (High-Value Tables):**
+# MAGIC - `dim_store` - Store/warehouse locations and channels
+# MAGIC - `dim_promotion` - Marketing campaigns and promotional offers
+# MAGIC - `fact_returns` - Product returns and refunds fact table
+# MAGIC
 # MAGIC ### **Silver Layer Tables**
 # MAGIC Cleaned and validated data:
 # MAGIC - `orders` - Validated orders with DQ checks enabled
@@ -36,8 +41,8 @@
 # MAGIC - `orders_raw` - Raw order data from source systems
 # MAGIC
 # MAGIC ### **Maintenance Policies**
-# MAGIC - **Daily OPTIMIZE**: High-volume transaction tables (fact_sales, orders)
-# MAGIC - **Weekly OPTIMIZE**: Dimension tables (dim_customer, dim_product)
+# MAGIC - **Daily OPTIMIZE**: High-volume transaction tables (fact_sales, fact_returns, orders)
+# MAGIC - **Weekly OPTIMIZE**: Dimension tables (dim_customer, dim_product, dim_store, dim_promotion)
 # MAGIC - **Monthly OPTIMIZE**: Static tables (dim_date)
 # MAGIC - **Default VACUUM**: 168 hours (7 days) retention
 # MAGIC
@@ -133,7 +138,65 @@
 # MAGIC     TRUE, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP(), CURRENT_USER()
 # MAGIC );
 # MAGIC
-# MAGIC SELECT 'Gold layer tables configured successfully!' as status;
+# MAGIC -- ============================================
+# MAGIC -- PHASE 1 ADDITIONS: High-Value Tables
+# MAGIC -- ============================================
+# MAGIC
+# MAGIC -- 5. DIM_STORE - Store/Warehouse Dimension
+# MAGIC INSERT INTO retailpulse.ops.metadata_catalog 
+# MAGIC (
+# MAGIC     catalog_name, schema_name, table_name, table_type, layer,
+# MAGIC     description, business_domain, owner, tags,
+# MAGIC     dq_checks_enabled, refresh_frequency, sla_hours,
+# MAGIC     optimize_frequency, zorder_columns, vacuum_retention_hours, auto_optimize_enabled,
+# MAGIC     is_active, created_date, updated_date, updated_by
+# MAGIC )
+# MAGIC VALUES (
+# MAGIC     'retailpulse', 'gold', 'dim_store', 'MANAGED', 'GOLD',
+# MAGIC     'Store dimension table with physical and virtual sales channels, regions, and fulfillment centers',
+# MAGIC     'Store', 'Data Engineering Team', ARRAY('store', 'dimension', 'location'),
+# MAGIC     TRUE, 'DAILY', 24,
+# MAGIC     'WEEKLY', ARRAY('store_id', 'region'), 168, FALSE,
+# MAGIC     TRUE, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP(), CURRENT_USER()
+# MAGIC );
+# MAGIC
+# MAGIC -- 6. DIM_PROMOTION - Promotion Dimension
+# MAGIC INSERT INTO retailpulse.ops.metadata_catalog 
+# MAGIC (
+# MAGIC     catalog_name, schema_name, table_name, table_type, layer,
+# MAGIC     description, business_domain, owner, tags,
+# MAGIC     dq_checks_enabled, refresh_frequency, sla_hours,
+# MAGIC     optimize_frequency, zorder_columns, vacuum_retention_hours, auto_optimize_enabled,
+# MAGIC     is_active, created_date, updated_date, updated_by
+# MAGIC )
+# MAGIC VALUES (
+# MAGIC     'retailpulse', 'gold', 'dim_promotion', 'MANAGED', 'GOLD',
+# MAGIC     'Promotion dimension table with marketing campaigns, discount types, and promotional offers',
+# MAGIC     'Marketing', 'Data Engineering Team', ARRAY('promotion', 'dimension', 'marketing'),
+# MAGIC     TRUE, 'DAILY', 12,
+# MAGIC     'WEEKLY', ARRAY('promotion_id'), 168, FALSE,
+# MAGIC     TRUE, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP(), CURRENT_USER()
+# MAGIC );
+# MAGIC
+# MAGIC -- 7. FACT_RETURNS - Returns Fact Table
+# MAGIC INSERT INTO retailpulse.ops.metadata_catalog 
+# MAGIC (
+# MAGIC     catalog_name, schema_name, table_name, table_type, layer,
+# MAGIC     description, business_domain, owner, tags,
+# MAGIC     dq_checks_enabled, refresh_frequency, sla_hours,
+# MAGIC     optimize_frequency, zorder_columns, vacuum_retention_hours, auto_optimize_enabled,
+# MAGIC     is_active, created_date, updated_date, updated_by
+# MAGIC )
+# MAGIC VALUES (
+# MAGIC     'retailpulse', 'gold', 'fact_returns', 'MANAGED', 'GOLD',
+# MAGIC     'Returns fact table containing all product returns, refunds, and return reasons',
+# MAGIC     'Sales', 'Data Engineering Team', ARRAY('returns', 'refunds', 'fact'),
+# MAGIC     TRUE, 'DAILY', 4,
+# MAGIC     'DAILY', ARRAY('return_date', 'customer_id'), 168, FALSE,
+# MAGIC     TRUE, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP(), CURRENT_USER()
+# MAGIC );
+# MAGIC
+# MAGIC SELECT 'Gold layer tables configured successfully (7 tables including Phase 1)!' as status;
 
 # COMMAND ----------
 
@@ -304,6 +367,147 @@
 # MAGIC  'POSITIVE', 'Price must be greater than 0', TRUE,
 # MAGIC  TRUE, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP(), CURRENT_USER());
 # MAGIC
+# MAGIC -- ============================================
+# MAGIC -- PHASE 1: Column Metadata for New Tables
+# MAGIC -- ============================================
+# MAGIC
+# MAGIC -- DIM_STORE Columns
+# MAGIC INSERT INTO retailpulse.ops.metadata_catalog 
+# MAGIC (
+# MAGIC     catalog_name, schema_name, table_name, column_name, data_type,
+# MAGIC     is_required, is_primary_key, column_description,
+# MAGIC     validation_rule, rule_description, dq_checks_enabled,
+# MAGIC     is_active, created_date, updated_date, updated_by
+# MAGIC )
+# MAGIC VALUES 
+# MAGIC ('retailpulse', 'gold', 'dim_store', 'store_id', 'BIGINT',
+# MAGIC  TRUE, TRUE, 'Primary key for store dimension',
+# MAGIC  'NOT_NULL', 'Store ID must not be null', TRUE,
+# MAGIC  TRUE, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP(), CURRENT_USER()),
+# MAGIC
+# MAGIC ('retailpulse', 'gold', 'dim_store', 'store_name', 'STRING',
+# MAGIC  TRUE, FALSE, 'Name of the store or warehouse',
+# MAGIC  'NOT_NULL', 'Store name must not be null or empty', TRUE,
+# MAGIC  TRUE, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP(), CURRENT_USER()),
+# MAGIC
+# MAGIC ('retailpulse', 'gold', 'dim_store', 'store_type', 'STRING',
+# MAGIC  TRUE, FALSE, 'Type of store (retail/online/outlet/warehouse)',
+# MAGIC  'NOT_NULL', 'Store type must not be null', TRUE,
+# MAGIC  TRUE, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP(), CURRENT_USER()),
+# MAGIC
+# MAGIC ('retailpulse', 'gold', 'dim_store', 'region', 'STRING',
+# MAGIC  TRUE, FALSE, 'Geographic region of the store',
+# MAGIC  'NOT_NULL', 'Region must not be null', TRUE,
+# MAGIC  TRUE, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP(), CURRENT_USER()),
+# MAGIC
+# MAGIC ('retailpulse', 'gold', 'dim_store', 'manager', 'STRING',
+# MAGIC  FALSE, FALSE, 'Store manager name',
+# MAGIC  NULL, NULL, FALSE,
+# MAGIC  TRUE, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP(), CURRENT_USER()),
+# MAGIC
+# MAGIC ('retailpulse', 'gold', 'dim_store', 'open_date', 'DATE',
+# MAGIC  TRUE, FALSE, 'Date the store opened',
+# MAGIC  'DATE_VALID', 'Open date must be a valid date', TRUE,
+# MAGIC  TRUE, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP(), CURRENT_USER());
+# MAGIC
+# MAGIC -- DIM_PROMOTION Columns
+# MAGIC INSERT INTO retailpulse.ops.metadata_catalog 
+# MAGIC (
+# MAGIC     catalog_name, schema_name, table_name, column_name, data_type,
+# MAGIC     is_required, is_primary_key, column_description,
+# MAGIC     validation_rule, rule_description, dq_checks_enabled,
+# MAGIC     is_active, created_date, updated_date, updated_by
+# MAGIC )
+# MAGIC VALUES 
+# MAGIC ('retailpulse', 'gold', 'dim_promotion', 'promotion_id', 'BIGINT',
+# MAGIC  TRUE, TRUE, 'Primary key for promotion dimension',
+# MAGIC  'NOT_NULL', 'Promotion ID must not be null', TRUE,
+# MAGIC  TRUE, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP(), CURRENT_USER()),
+# MAGIC
+# MAGIC ('retailpulse', 'gold', 'dim_promotion', 'promotion_name', 'STRING',
+# MAGIC  TRUE, FALSE, 'Name of the promotion or campaign',
+# MAGIC  'NOT_NULL', 'Promotion name must not be null or empty', TRUE,
+# MAGIC  TRUE, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP(), CURRENT_USER()),
+# MAGIC
+# MAGIC ('retailpulse', 'gold', 'dim_promotion', 'promotion_type', 'STRING',
+# MAGIC  TRUE, FALSE, 'Type of promotion (BOGO, percent_off, bundle, etc.)',
+# MAGIC  'NOT_NULL', 'Promotion type must not be null', TRUE,
+# MAGIC  TRUE, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP(), CURRENT_USER()),
+# MAGIC
+# MAGIC ('retailpulse', 'gold', 'dim_promotion', 'discount_pct', 'DECIMAL(5,2)',
+# MAGIC  FALSE, FALSE, 'Discount percentage (0-100)',
+# MAGIC  'NON_NEGATIVE', 'Discount percentage must be >= 0', TRUE,
+# MAGIC  TRUE, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP(), CURRENT_USER()),
+# MAGIC
+# MAGIC ('retailpulse', 'gold', 'dim_promotion', 'start_date', 'DATE',
+# MAGIC  TRUE, FALSE, 'Promotion start date',
+# MAGIC  'DATE_VALID', 'Start date must be a valid date', TRUE,
+# MAGIC  TRUE, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP(), CURRENT_USER()),
+# MAGIC
+# MAGIC ('retailpulse', 'gold', 'dim_promotion', 'end_date', 'DATE',
+# MAGIC  TRUE, FALSE, 'Promotion end date',
+# MAGIC  'DATE_VALID', 'End date must be a valid date', TRUE,
+# MAGIC  TRUE, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP(), CURRENT_USER()),
+# MAGIC
+# MAGIC ('retailpulse', 'gold', 'dim_promotion', 'promo_code', 'STRING',
+# MAGIC  FALSE, FALSE, 'Promotional code for online/app usage',
+# MAGIC  NULL, NULL, FALSE,
+# MAGIC  TRUE, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP(), CURRENT_USER());
+# MAGIC
+# MAGIC -- FACT_RETURNS Columns
+# MAGIC INSERT INTO retailpulse.ops.metadata_catalog 
+# MAGIC (
+# MAGIC     catalog_name, schema_name, table_name, column_name, data_type,
+# MAGIC     is_required, is_primary_key, column_description,
+# MAGIC     validation_rule, rule_description, dq_checks_enabled,
+# MAGIC     is_active, created_date, updated_date, updated_by
+# MAGIC )
+# MAGIC VALUES 
+# MAGIC ('retailpulse', 'gold', 'fact_returns', 'return_id', 'BIGINT',
+# MAGIC  TRUE, TRUE, 'Primary key for return transactions',
+# MAGIC  'NOT_NULL', 'Return ID must not be null', TRUE,
+# MAGIC  TRUE, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP(), CURRENT_USER()),
+# MAGIC
+# MAGIC ('retailpulse', 'gold', 'fact_returns', 'order_id', 'BIGINT',
+# MAGIC  TRUE, FALSE, 'Original order ID (foreign key to fact_sales)',
+# MAGIC  'NOT_NULL', 'Order ID must not be null', TRUE,
+# MAGIC  TRUE, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP(), CURRENT_USER()),
+# MAGIC
+# MAGIC ('retailpulse', 'gold', 'fact_returns', 'customer_id', 'BIGINT',
+# MAGIC  TRUE, FALSE, 'Foreign key to dim_customer',
+# MAGIC  'NOT_NULL', 'Customer ID must not be null', TRUE,
+# MAGIC  TRUE, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP(), CURRENT_USER()),
+# MAGIC
+# MAGIC ('retailpulse', 'gold', 'fact_returns', 'product_id', 'BIGINT',
+# MAGIC  TRUE, FALSE, 'Foreign key to dim_product',
+# MAGIC  'NOT_NULL', 'Product ID must not be null', TRUE,
+# MAGIC  TRUE, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP(), CURRENT_USER()),
+# MAGIC
+# MAGIC ('retailpulse', 'gold', 'fact_returns', 'return_date', 'DATE',
+# MAGIC  TRUE, FALSE, 'Date of the return',
+# MAGIC  'DATE_VALID', 'Return date must be a valid date', TRUE,
+# MAGIC  TRUE, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP(), CURRENT_USER()),
+# MAGIC
+# MAGIC ('retailpulse', 'gold', 'fact_returns', 'quantity_returned', 'INT',
+# MAGIC  TRUE, FALSE, 'Quantity of items returned',
+# MAGIC  'POSITIVE', 'Quantity returned must be greater than 0', TRUE,
+# MAGIC  TRUE, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP(), CURRENT_USER()),
+# MAGIC
+# MAGIC ('retailpulse', 'gold', 'fact_returns', 'return_amount', 'DECIMAL(10,2)',
+# MAGIC  TRUE, FALSE, 'Total return/refund amount',
+# MAGIC  'POSITIVE', 'Return amount must be greater than 0', TRUE,
+# MAGIC  TRUE, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP(), CURRENT_USER()),
+# MAGIC
+# MAGIC ('retailpulse', 'gold', 'fact_returns', 'refund_amount', 'DECIMAL(10,2)',
+# MAGIC  TRUE, FALSE, 'Actual refund amount (may differ due to restocking fees)',
+# MAGIC  'NON_NEGATIVE', 'Refund amount must be >= 0', TRUE,
+# MAGIC  TRUE, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP(), CURRENT_USER()),
+# MAGIC
+# MAGIC ('retailpulse', 'gold', 'fact_returns', 'restocking_fee', 'DECIMAL(10,2)',
+# MAGIC  FALSE, FALSE, 'Restocking fee charged',
+# MAGIC  'NON_NEGATIVE', 'Restocking fee must be >= 0', TRUE,
+# MAGIC  TRUE, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP(), CURRENT_USER());
+# MAGIC
 # MAGIC SELECT 'Column-level metadata and validation rules configured successfully!' as status;
 
 # COMMAND ----------
@@ -406,3 +610,32 @@
 # MAGIC GROUP BY optimize_frequency
 # MAGIC
 # MAGIC ORDER BY metric_category, metric_name;
+
+# COMMAND ----------
+
+# DBTITLE 1,Update Orchestrator Job Configuration
+import json
+from databricks.sdk import WorkspaceClient
+from databricks.sdk.service.jobs import JobSettings
+
+# Initialize Databricks client
+w = WorkspaceClient()
+
+# Read the job configuration
+config_path = "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/config/job_enterprise_orchestrator.json"
+with open(config_path, 'r') as f:
+    config = json.load(f)
+
+# Extract job_id and new_settings
+job_id = config['job_id']
+new_settings_dict = config['new_settings']
+
+# Convert dict to JobSettings object
+new_settings = JobSettings.from_dict(new_settings_dict)
+
+# Update the job
+w.jobs.reset(job_id=job_id, new_settings=new_settings)
+
+print(f"✅ Successfully updated job {job_id}: {new_settings.name}")
+print(f"   Added task: dq_framework (depends on gold_dims_facts)")
+print(f"   Total tasks: {len(new_settings.tasks)}")

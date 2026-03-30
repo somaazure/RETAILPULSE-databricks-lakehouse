@@ -1,51 +1,96 @@
 {
-  "name": "RetailPulse Gold Dims Facts Job",
-  "tasks": [
-    {
-      "task_key": "product_master",
-      "notebook_task": {
-        "notebook_path": "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/09_product_master"
-      }
-    },
-    {
-      "task_key": "dim_product",
-      "depends_on": [
-        {
-          "task_key": "product_master"
+  "job_id": 769000816655515,
+  "new_settings": {
+    "name": "RetailPulse Gold Dims Facts Job",
+    "max_concurrent_runs": 1,
+    "tasks": [
+      {
+        "task_key": "product_master",
+        "notebook_task": {
+          "notebook_path": "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/09_product_master",
+          "source": "WORKSPACE"
         }
-      ],
-      "notebook_task": {
-        "notebook_path": "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/10_dim_product"
-      }
-    },
-    {
-      "task_key": "dim_customer",
-      "notebook_task": {
-        "notebook_path": "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/11_dim_customer"
-      }
-    },
-    {
-      "task_key": "dim_date",
-      "notebook_task": {
-        "notebook_path": "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/12_dim_date"
-      }
-    },
-    {
-      "task_key": "fact_sales",
-      "depends_on": [
-        {
-          "task_key": "dim_product"
-        },
-        {
-          "task_key": "dim_customer"
-        },
-        {
-          "task_key": "dim_date"
+      },
+      {
+        "task_key": "dim_product",
+        "depends_on": [
+          {
+            "task_key": "product_master"
+          }
+        ],
+        "notebook_task": {
+          "notebook_path": "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/10_dim_product",
+          "source": "WORKSPACE"
         }
-      ],
-      "notebook_task": {
-        "notebook_path": "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/13_fact_sales"
+      },
+      {
+        "task_key": "dim_customer",
+        "notebook_task": {
+          "notebook_path": "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/11_dim_customer",
+          "source": "WORKSPACE"
+        }
+      },
+      {
+        "task_key": "dim_date",
+        "notebook_task": {
+          "notebook_path": "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/12_dim_date",
+          "source": "WORKSPACE"
+        }
+      },
+      {
+        "task_key": "dim_store",
+        "notebook_task": {
+          "notebook_path": "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/14_dim_store",
+          "source": "WORKSPACE"
+        }
+      },
+      {
+        "task_key": "dim_promotion",
+        "notebook_task": {
+          "notebook_path": "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/15_dim_promotion",
+          "source": "WORKSPACE"
+        }
+      },
+      {
+        "task_key": "fact_sales",
+        "depends_on": [
+          {
+            "task_key": "dim_product"
+          },
+          {
+            "task_key": "dim_customer"
+          },
+          {
+            "task_key": "dim_date"
+          }
+        ],
+        "notebook_task": {
+          "notebook_path": "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/13_fact_sales",
+          "source": "WORKSPACE"
+        }
+      },
+      {
+        "task_key": "fact_returns",
+        "depends_on": [
+          {
+            "task_key": "dim_store"
+          },
+          {
+            "task_key": "dim_customer"
+          },
+          {
+            "task_key": "dim_product"
+          },
+          {
+            "task_key": "dim_date"
+          }
+        ],
+        "notebook_task": {
+          "notebook_path": "/Workspace/Users/shekartelstra@gmail.com/RetailPulse/notebooks/16_fact_returns",
+          "source": "WORKSPACE"
+        }
       }
-    }
-  ]
+    ],
+    "format": "MULTI_TASK"
+  }
 }
