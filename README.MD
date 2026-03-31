@@ -111,6 +111,17 @@ RetailPulse/
 ├── 04_Orchestration/            # Reserved for future pipeline notebooks
 ├── 05_Documentation/            # Architecture & guides
 │   └── RetailPulse Framework Architecture
+├── 06_Testing/                  # Comprehensive unit test suite
+│   ├── test_cases/              # Test case artifacts
+│   ├── Unit_Test_Suite          # Master test suite (reference)
+│   ├── Test_01_Schema_Validation
+│   ├── Test_02_Metadata_Integrity
+│   ├── Test_03_Freshness_Logic
+│   ├── Test_04_Quality_Rules
+│   ├── Test_05_Completeness_Checks
+│   └── Test_06_Advanced_Tests
+├── 07_MCP-AgentBricks/          # MCP Server integration & agent utilities
+│   └── DQ_Validation_MCP_Server # UC-registered DQ validation functions
 ├── 99_Archive/                  # Archived utilities
 │   └── src/utils/
 ├── notebooks/                   # Active data pipeline notebooks
@@ -129,6 +140,72 @@ RetailPulse/
 │   ├── skills/
 │   └── prompts/
 └── README.MD                    # This file
+```
+
+---
+
+## 🧪 Testing Framework
+
+### **Test Suite Overview**
+RetailPulse includes a comprehensive unit test suite with **28 test cases (UTC-001 to UTC-028)** organized across 6 test notebooks:
+
+| Test Suite | Test Cases | Coverage |
+|------------|-----------|----------|
+| **Test_01_Schema_Validation** | UTC-001 to UTC-005 | Audit table schema validation |
+| **Test_02_Metadata_Integrity** | UTC-006 to UTC-008 | Metadata catalog data validation |
+| **Test_03_Freshness_Logic** | UTC-009 to UTC-011 | SLA and freshness checks |
+| **Test_04_Quality_Rules** | UTC-012 to UTC-016 | Validation rule logic (NOT_NULL, POSITIVE, etc.) |
+| **Test_05_Completeness_Checks** | UTC-017 to UTC-019 | Row count and empty table detection |
+| **Test_06_Advanced_Tests** | UTC-020 to UTC-028 | DQ logging, error handling, integration tests |
+
+### **Running Tests**
+```python
+# Run individual test suites
+%run ./06_Testing/Test_01_Schema_Validation
+%run ./06_Testing/Test_02_Metadata_Integrity
+# ... etc
+
+# Or run the master suite
+%run ./06_Testing/Unit_Test_Suite  # All 28 tests
+```
+
+### **Test Features**
+* Automated pass/fail status tracking
+* Visual test result indicators (✓/✗)
+* Detailed error messaging
+* Summary statistics (pass rate, failures)
+* Mock data generation for isolated testing
+* Zero impact on production data
+
+---
+
+## 🔌 MCP Integration (Model Context Protocol)
+
+### **DQ Validation MCP Server**
+Location: `RetailPulse/07_MCP-AgentBricks/DQ_Validation_MCP_Server`
+
+The MCP Server exposes DQ validation functions as discoverable tools in Unity Catalog:
+
+**Available Functions:**
+* `retailpulse.ops.list_dq_checks()` - List available validation checks
+* `retailpulse.ops.get_dq_notebook_path()` - Get MCP notebook location
+* `retailpulse.ops.get_check_info(check_name)` - Get documentation for specific checks
+
+**Python Functions:**
+* `check_table_freshness(table_name, timestamp_column, max_age_hours)`
+* `validate_referential_integrity(child_table, child_column, parent_table, parent_column)`
+* `detect_data_drift(table_name, baseline_stats)`
+* `run_quality_rules(table_name, rules)`
+* `generate_dq_report(catalog, schema)`
+
+**Usage:**
+```sql
+-- Discover registered DQ tools
+SHOW FUNCTIONS IN retailpulse.ops;
+SELECT * FROM retailpulse.ops.dq_validation_catalog;
+
+-- Get function documentation
+SELECT retailpulse.ops.get_check_info('freshness');
 ```
 
 ---
@@ -185,6 +262,12 @@ databricks pipelines create --json @config/dlt_bronze_silver_pipeline.json --pro
 databricks jobs create --json @config/job_enterprise_orchestrator.json --profile <your-profile>
 ```
 
+### 4. Validate Test Framework (Optional)
+```python
+# Run test suites to validate framework setup
+%run ./06_Testing/Test_01_Schema_Validation
+```
+
 ---
 
 ## 📅 Recommended Scheduling (Databricks Jobs)
@@ -219,6 +302,14 @@ Notebook: RetailPulse/03_Reporting/05_Audit_Reporting
 Schedule: 0 0 9 * * ? *  # Daily at 9 AM
 Timeout: 15 minutes
 Output: Email summary to leadership
+```
+
+### Job 5: RetailPulse Test Suite (Optional)
+```yaml
+Notebook: RetailPulse/06_Testing/Unit_Test_Suite
+Schedule: On-demand or after major changes
+Timeout: 15 minutes
+Alerts: Email on test failures
 ```
 
 ---
@@ -262,110 +353,104 @@ FROM retailpulse.ops.dq_validation_audit
 WHERE run_timestamp >= current_timestamp() - INTERVAL 7 DAYS;
 ```
 
----
+### Test Framework Validation
+```sql
+-- Verify audit tables exist
+SHOW TABLES IN retailpulse.ops;
 
-## 📊 Framework Features
-
-### Metadata-Driven Configuration
-- **Centralized catalog**: All tables, columns, validation rules in one place
-- **Dynamic checks**: DQ framework reads metadata and generates checks automatically
-- **Policy-based maintenance**: OPTIMIZE/VACUUM/ANALYZE driven by metadata policies
-
-### Data Quality Validation
-- **Freshness checks**: SLA validation against last_altered timestamps
-- **Quality rules**: NOT_NULL, POSITIVE, NON_NEGATIVE, DATE_VALID, EMAIL_FORMAT
-- **Completeness checks**: Row count validation
-- **Audit logging**: All results logged with pass/fail status, violation counts
-
-### Table Maintenance
-- **OPTIMIZE**: Compact small files (with ZORDER on configured columns)
-- **VACUUM**: Remove old files (configurable retention hours)
-- **ANALYZE**: Collect table statistics for query optimizer
-- **Metrics tracking**: Before/after file counts and sizes
-
-### Reporting & Monitoring
-- **DQ trends**: Pass rates over time
-- **ETL performance**: Job duration, row counts, failures
-- **Maintenance effectiveness**: Space saved, files compacted
-- **Executive dashboard**: Overall health metrics
+-- Check metadata catalog configuration
+SELECT table_id, catalog_name, schema_name, table_name, is_active, sla_hours
+FROM retailpulse.ops.metadata_catalog
+WHERE is_active = true
+ORDER BY catalog_name, schema_name, table_name;
+```
 
 ---
 
-## 🏗️ Enterprise Design Principles
+## 📊 Key Tables Reference
 
-### Why This Architecture?
+### Bronze Layer
+* `retailpulse.bronze.orders` - Raw order data from CSV files
 
-**DLT for Streaming & Quality**:
-- Schema drift, rescue data, and streaming ingestion handled by DLT
-- Row-level expectations enforce quality at ingestion
+### Silver Layer
+* `retailpulse.silver.orders` - Validated and deduplicated orders
+* `retailpulse.silver.products` - Product master data
 
-**Jobs for Business Logic**:
-- Gold layer changes frequently with business rules
-- Modular jobs reduce blast radius and enable independent reruns
-- SCD policies, backfills, and release cycles easier to manage
+### Gold Layer
+* `retailpulse.gold.dim_product` - Product dimension (SCD Type 2)
+* `retailpulse.gold.dim_customer` - Customer dimension
+* `retailpulse.gold.dim_date` - Date dimension
+* `retailpulse.gold.fact_sales` - Sales fact table
 
-**Metadata-Driven Framework**:
-- Centralized configuration eliminates scattered validation logic
-- Audit logging enables trend analysis and alerting
-- Policy-based maintenance ensures consistent performance
-
----
-
-## 📁 Configuration Files
-
-| File | Purpose |
-|------|---------|
-| `config/dlt_bronze_silver_pipeline.json` | DLT pipeline definition |
-| `config/job_gold_dims_facts.json` | Gold layer job definition |
-| `config/job_enterprise_orchestrator.json` | Orchestrator job definition |
+### Ops Layer (Audit & Quarantine)
+* `retailpulse.ops.metadata_catalog` - Table configuration registry
+* `retailpulse.ops.dq_validation_audit` - DQ validation results
+* `retailpulse.ops.etl_job_audit` - ETL job execution logs
+* `retailpulse.ops.maintenance_audit` - Maintenance operation logs
+* `retailpulse.ops.table_change_audit` - Schema/data change tracking
+* `retailpulse.ops.silver_orders_quarantine` - Invalid silver records
+* `retailpulse.ops.fact_sales_quarantine` - Unresolved fact records
 
 ---
 
-## 🔗 Repository
+## 🔐 Security & Governance
 
-`https://github.com/somaazure/RETAILPULSE-databricks-lakehouse`
-
----
-
-## 📚 Additional Documentation
-
-- **Framework Architecture**: See `RetailPulse/05_Documentation/RetailPulse Framework Architecture` notebook
-- **README Guide**: See `RetailPulse/README - Framework Guide` notebook
-- **AI Context**: See `.ai/context/architecture.md` for detailed architecture documentation
-- **AI Skills**: See `.ai/skills/` for operation-specific guidance
+* Unity Catalog for table-level access control
+* Row-level security via Unity Catalog functions (available)
+* Column masking via Unity Catalog (available)
+* Audit logging for all DQ checks and maintenance operations
+* Metadata-driven validation rules stored securely in `metadata_catalog`
 
 ---
 
-## 🎯 Success Metrics
+## 🚧 Known Limitations & Future Enhancements
 
-**Data Pipeline Health**:
-- Bronze → Silver → Gold data flows successfully
-- Quarantine tables capture invalid records
-- All dimension and fact tables populated
+### Current Limitations
+1. SCD Type 2 joins use `is_current = true` instead of date-range joins (due to synthetic data timing)
+2. DQ validation is scheduled rather than real-time
+3. Test suite requires manual execution
 
-**Framework Health**:
-- DQ checks: 95%+ pass rate
-- Maintenance: Weekly optimizations complete successfully
-- Audit logs: All operations tracked with metrics
-
-**Operational Readiness**:
-- Jobs scheduled and running on cadence
-- Alerts configured for failures
-- Dashboards available for monitoring
+### Planned Enhancements
+1. Historical date-range joins for SCD Type 2 in production
+2. Real-time DQ validation via Delta Live Tables expectations
+3. Automated test execution on pipeline changes
+4. Additional MCP Server functions for advanced analytics
+5. Integration with external monitoring tools (DataDog, Prometheus)
 
 ---
 
-## 📝 Notes
+## 📚 Additional Resources
 
-### One-Time Cutover
-If your workspace has Gold tables from an older DLT-managed branch:
-1. Stop the old DLT pipeline
-2. Backup existing `retailpulse.gold.*` tables
-3. Drop DLT-managed versions
-4. Let enterprise notebooks recreate as standard Delta tables
+* **Architecture Documentation**: `.ai/context/architecture.md`
+* **Data Model**: `.ai/context/data_model.md`
+* **Coding Standards**: `.ai/context/coding_standards.md`
+* **Pipeline Skills**: `.ai/skills/` (bronze, silver, SCD2, facts)
+* **MCP Integration**: `07_MCP-AgentBricks/DQ_Validation_MCP_Server`
+* **Test Suites**: `06_Testing/` (28 comprehensive test cases)
 
-### Framework Notebooks
-- **Setup notebooks (00-02)**: Run once during initial setup
-- **DQ Framework (03)**: Run after every data load
-- **Maintenance (04)**: Run weekly
-- **Reporting (05)**: Run daily or on-demand
+---
+
+## 🤝 Contributing
+
+When adding new tables or pipelines:
+1. Update `metadata_catalog` with table configuration
+2. Define validation rules in `validation_rules` column
+3. Add test cases to appropriate test suite in `06_Testing/`
+4. Update `.ai/context/architecture.md` with table relationships
+5. Document new MCP functions in `07_MCP-AgentBricks/` if applicable
+
+---
+
+## 📞 Support
+
+For questions or issues:
+* Review test suite results in `06_Testing/`
+* Check audit tables in `retailpulse.ops.*`
+* Consult architecture documentation in `.ai/context/`
+* Use MCP Server functions for DQ insights
+
+---
+
+**Project Version**: 2.0  
+**Last Updated**: 2026-03-31  
+**Maintainer**: RetailPulse Data Engineering Team
