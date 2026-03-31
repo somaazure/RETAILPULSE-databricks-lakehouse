@@ -66,6 +66,22 @@ Example prompt:
 Use the fact_table skill and create a DLT fact_sales_dlt table plus fact_sales_quarantine so unresolved dimension joins are preserved instead of failing the whole pipeline.
 ```
 
+### `orchestration.md`
+
+Use for:
+
+- multi-task Databricks job workflows
+- sequencing DLT pipelines with downstream Gold jobs
+- event-based or scheduled triggers
+- job dependencies and error handling
+- enterprise hybrid architecture (DLT + Jobs)
+
+Example prompt:
+
+```text
+Use the orchestration skill and create a Databricks job that runs the Bronze/Silver DLT pipeline first, then triggers the Gold dimensions and facts job upon successful completion with proper error handling.
+```
+
 ### `streaming_pipeline.md`
 
 Use for:
@@ -95,8 +111,9 @@ These project context files help the skills stay aligned with the RetailPulse im
 2. Use `silver_transform` for cleaning, casting, deduplication, and validation.
 3. Use `scd2_merge` for historical dimensions such as `dim_product`.
 4. Use `fact_table` for gold facts and dimension key resolution.
-5. Ask explicitly for DLT expectations and quarantine tables when you want operational data quality handling.
-6. Ask to sync changes to Databricks workspace and create or update the DLT pipeline if needed.
+5. Use `orchestration` for coordinating DLT pipelines with Gold layer jobs.
+6. Ask explicitly for DLT expectations and quarantine tables when you want operational data quality handling.
+7. Ask to sync changes to Databricks workspace and create or update the DLT pipeline if needed.
 
 ## Copy-Paste Prompt Examples
 
@@ -136,16 +153,22 @@ Use the fact_table skill and build retailpulse.gold.fact_sales by joining silver
 Use the fact_table skill and create a DLT fact_sales_dlt table plus fact_sales_quarantine so unresolved dimension joins are preserved instead of failing the whole pipeline.
 ```
 
+### Orchestration Job
+
+```text
+Use the orchestration skill and create a Databricks job workflow that runs the Bronze/Silver DLT pipeline, waits for success, then triggers the Gold job with dimensions and facts processing.
+```
+
 ### Full Project Build
 
 ```text
-Using the project skills in .ai/skills, build the RetailPulse pipeline end to end: bronze ingestion, silver transform, SCD2 product dimension, customer and date dimensions, fact_sales, then add a DLT quality pipeline with curated and quarantine outputs. Sync all changes to my Databricks workspace.
+Using the project skills in .ai/skills, build the RetailPulse pipeline end to end: bronze ingestion, silver transform, SCD2 product dimension, customer and date dimensions, fact_sales, orchestration job, then add a DLT quality pipeline with curated and quarantine outputs. Sync all changes to my Databricks workspace.
 ```
 
 ### New Domain Using Same Pattern
 
 ```text
-Use the RetailPulse project skills and context to create a new inventory pipeline end to end with bronze, silver, dimension tables, fact_inventory, and a DLT quality layer with quarantine and reprocessing-ready dq_reason columns.
+Use the RetailPulse project skills and context to create a new inventory pipeline end to end with bronze, silver, dimension tables, fact_inventory, orchestrated workflow, and a DLT quality layer with quarantine and reprocessing-ready dq_reason columns.
 ```
 
 ## Practical Prompting Tips
@@ -155,4 +178,5 @@ Use the RetailPulse project skills and context to create a new inventory pipelin
 - Say whether you want batch, streaming, or DLT.
 - Say whether bad data should be dropped, failed, or quarantined.
 - For facts, say whether joins should use current-mode or historical-mode SCD logic.
+- For orchestration, specify dependencies and trigger strategy.
 - If working in this repo, ask to sync to Databricks workspace when you want the workspace updated too.

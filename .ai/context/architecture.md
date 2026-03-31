@@ -1,253 +1,620 @@
-# Architecture
+# RetailPulse Architecture
 
 ## Overview
 
-RetailPulse is a Databricks Lakehouse project built on Unity Catalog with a medallion-style design.
+RetailPulse is a retail analytics platform built on Databricks, implementing a medallion architecture (Bronze → Silver → Gold) for data processing. The platform provides real-time and batch data ingestion, comprehensive data quality validation, operational monitoring, and AI-powered analytics capabilities.
 
-- Platform: Databricks Lakehouse
-- Catalog: `retailpulse`
-- Storage pattern: Unity Catalog volumes for landed files and Delta tables for curated layers
-- Processing pattern: Auto Loader ingestion plus batch transformations, coordinated through DLT and Databricks Jobs
+## Architecture Diagram
 
-## Layers
-
-- Bronze: raw orders ingestion from a Unity Catalog volume into Delta
-- Silver: validated and deduplicated business-ready tables
-- Gold: dimensional and fact tables for analytics
-- Ops: quarantine tables for rejected or unresolved records
-
-## Source And Ingestion
-
-Orders are generated as CSV files and written to the Unity Catalog volume path:
-
-`/Volumes/retailpulse/bronze/orders_files/orders/`
-
-Auto Loader ingests those files into:
-
-`retailpulse.bronze.orders`
-
-The bronze ingestion process also stores schema inference and checkpoint state under:
-
-`/Volumes/retailpulse/bronze/orders_files/checkpoints/`
-
-## Table Relationships
-
-```text
-/Volumes/retailpulse/bronze/orders_files/orders/
-                  |
-                  v
-+----------------------------------+
-| retailpulse.bronze.orders        |
-|----------------------------------|
-| order_id                         |
-| customer_id                      |
-| product_id                       |
-| quantity                         |
-| price                            |
-| _rescued_data                    |
-| source_file_name                 |
-| ingest_ts                        |
-+----------------+-----------------+
-                 |
-                 | clean, validate, deduplicate
-                 v
-+----------------------------------+
-| retailpulse.silver.orders        |
-|----------------------------------|
-| order_id                         |
-| customer_id                      |
-| product_id                       |
-| quantity                         |
-| price                            |
-| source_file_name                 |
-| ingest_ts                        |
-+----------------+-----------------+
-                 |                        \
-                 |                         \
-                 |                          \
-                 v                           v
-+----------------------------------+   +----------------------------------+
-| retailpulse.gold.dim_customer    |   | retailpulse.gold.dim_date        |
-|----------------------------------|   |----------------------------------|
-| customer_id                      |   | date_id                          |
-| customer_name                    |   | full_date                        |
-| customer_segment                 |   | day                              |
-| customer_status                  |   | month                            |
-+----------------------------------+   | year                             |
-                                       | week_of_year                     |
-                                       +----------------------------------+
-
-+----------------------------------+
-| retailpulse.silver.products      |
-|----------------------------------|
-| product_id                       |
-| product_name                     |
-| category_id                      |
-| price                            |
-+----------------+-----------------+
-                 |
-                 | SCD Type 2 source
-                 v
-+----------------------------------+
-| retailpulse.gold.dim_product     |
-|----------------------------------|
-| product_sk                       |
-| product_id                       |
-| product_name                     |
-| category_id                      |
-| current_price                    |
-| start_date                       |
-| end_date                         |
-| is_current                       |
-+----------------+-----------------+
-                 |
-                 | joins into fact_sales
-                 v
-+----------------------------------+
-| retailpulse.gold.fact_sales      |
-|----------------------------------|
-| order_id                         |
-| product_sk                       |
-| customer_id                      |
-| date_id                          |
-| quantity                         |
-| price                            |
-| sales_amount                     |
-| order_ts                         |
-+----------------------------------+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           DATA SOURCES                                   │
+├─────────────────────────────────────────────────────────────────────────┤
+│  Cloud Files (S3/ADLS/GCS)  │  Kafka/Event Hubs  │  JDBC/APIs          │
+└──────────────────┬──────────────────────┬─────────────────┬─────────────┘
+                   │                      │                 │
+                   ▼                      ▼                 ▼
+         ┌─────────────────────────────────────────────────────────┐
+         │              BRONZE LAYER (Raw Ingestion)               │
+         ├─────────────────────────────────────────────────────────┤
+         │  • Auto Loader (cloudFiles)                             │
+         │  • Streaming ingestion with schema inference            │
+         │  • Minimal transformation                               │
+         │  • Preserve source data integrity                       │
+         │  • Add technical metadata (ingestion_timestamp, etc.)   │
+         └────────────────────┬────────────────────────────────────┘
+                              │
+                              ▼
+         ┌─────────────────────────────────────────────────────────┐
+         │          SILVER LAYER (Cleaned & Validated)             │
+         ├─────────────────────────────────────────────────────────┤
+         │  • Data cleansing & standardization                     │
+         │  • Deduplication                                        │
+         │  • Data quality expectations (DQ Framework)             │
+         │  • CDC for dimension tables (SCD Type 1/2)              │
+         │  • Business logic application                           │
+         │  • Enrichment with lookups                              │
+         └────────────────────┬────────────────────────────────────┘
+                              │
+                              ▼
+         ┌─────────────────────────────────────────────────────────┐
+         │        GOLD LAYER (Business-Ready Aggregates)           │
+         ├─────────────────────────────────────────────────────────┤
+         │  • Aggregated metrics & KPIs                            │
+         │  • Denormalized for analytics                           │
+         │  • Customer 360 views                                   │
+         │  • Sales/inventory dashboards                           │
+         │  • ML feature engineering                               │
+         └────────────────────┬────────────────────────────────────┘
+                              │
+                              ▼
+         ┌─────────────────────────────────────────────────────────┐
+         │                 OPERATIONAL LAYER                       │
+         ├─────────────────────────────────────────────────────────┤
+         │  • metadata_catalog (schema registry)                   │
+         │  • dq_validation_audit (quality metrics)                │
+         │  • etl_job_audit (pipeline runs)                        │
+         │  • maintenance_audit (optimization logs)                │
+         │  • table_change_audit (schema evolution)                │
+         └─────────────────────────────────────────────────────────┘
 ```
 
-## Business Meaning
+## Medallion Architecture Layers
 
-- `retailpulse.bronze.orders` stores raw landed order events with minimal transformation.
-- `retailpulse.silver.orders` stores trusted order records after type casting, validation, and deduplication.
-- `retailpulse.silver.products` stores the current product master data used to seed product dimensions.
-- `retailpulse.gold.dim_product` stores product history using SCD Type 2 logic.
-- `retailpulse.gold.dim_customer` stores one row per customer derived from silver orders.
-- `retailpulse.gold.dim_date` stores one row per calendar date derived from silver order timestamps.
-- `retailpulse.gold.fact_sales` stores sales transactions joined to the gold dimensions.
-- `retailpulse.ops.silver_orders_quarantine` stores rejected Silver-order rows with `dq_reason`.
-- `retailpulse.ops.fact_sales_quarantine` stores unresolved fact rows, such as missing product/date/customer matches, with `dq_reason`.
+### Bronze Layer (Raw Data)
+**Purpose**: Ingest raw data with minimal transformation
 
-## Relationship Summary
+**Characteristics**:
+* Schema-on-read with automatic inference
+* Append-only streaming tables
+* Preserve source format and structure
+* Add technical metadata for lineage
 
-- One product can appear in many order records.
-- One customer can place many orders.
-- One calendar date can have many orders.
-- `retailpulse.gold.dim_product` keeps multiple historical rows for one `product_id`, but only one row should be current.
-- `retailpulse.gold.fact_sales` joins:
-  - `product_id` to the current `dim_product` row to get `product_sk`
-  - `customer_id` to `dim_customer`
-  - `to_date(order_ts)` to `dim_date.full_date`
+**Technologies**:
+* Auto Loader for cloud file ingestion
+* Kafka/Event Hubs for streaming events
+* JDBC for database replication
+* Delta Live Tables streaming tables
 
-## SCD Join Strategy (Current Implementation)
+**Naming Convention**: `bronze_{domain}_{entity}`
+* Example: `bronze_sales_transactions`, `bronze_inventory_stock`
 
-- Fact tables currently join `dim_product` using `product_id` and `is_current = true`.
-- This approach is used because the synthetic sample data has a timing mismatch between order timestamps and product effective dates.
-- In production, this will be replaced with a historical date-range join:
-  `fact_timestamp BETWEEN effective_start_ts AND effective_end_ts`
+### Silver Layer (Cleaned Data)
+**Purpose**: Cleansed, validated, and conformed data
 
-## Technology Choices
+**Characteristics**:
+* Schema enforcement with expectations
+* Data quality validation
+* Deduplication and cleansing
+* Business rule application
+* Slowly Changing Dimensions (SCD)
 
-- PySpark for data engineering logic
-- Delta Lake for ACID tables and merge support
-- Unity Catalog for table governance and volumes
-- Auto Loader for file-based incremental ingestion
-- Lakeflow / Delta Live Tables for data quality enforcement, observability, and quarantine-style exception handling
-- Databricks Jobs for Gold-layer orchestration and batch processing
-- SCD Type 2 for dimensional history tracking
+**Technologies**:
+* Delta Live Tables with expectations
+* Auto CDC for change data capture
+* Streaming and batch processing
+* Data quality framework
 
-## DLT Quality Pattern
+**Naming Convention**: `silver_{domain}_{entity}`
+* Example: `silver_sales_orders`, `silver_customer_profiles`
 
-- DLT notebook: `notebooks/08_dlt_e2e_main_refresh.py`
-- DLT config: `config/dlt_bronze_silver_pipeline.json`
-- Pipeline type: triggered serverless DLT pipeline for Bronze and Silver
-- Sync helper: `sync_to_workspace.ps1`
+### Gold Layer (Business Aggregates)
+**Purpose**: Business-ready, aggregated datasets
 
-Current DLT design choices:
+**Characteristics**:
+* Denormalized for query performance
+* Pre-computed aggregations
+* Optimized for analytics workloads
+* Liquid clustering for multi-dimensional queries
 
-- DLT handles ingestion, schema evolution, and data quality for Bronze and Silver.
-- `retailpulse.bronze.orders` is ingested from the Unity Catalog volume using Auto Loader.
-- `retailpulse.silver.orders` applies validation, casting, and deduplication.
-- `retailpulse.ops.silver_orders_quarantine` stores invalid Silver rows with `dq_reason`.
-- Gold dimensional modeling and fact creation are handled outside DLT in batch jobs.
+**Technologies**:
+* Materialized views for aggregations
+* Liquid clustering
+* Scheduled refreshes
+* BI tool integration
 
-## Pipeline Orchestration Strategy
+**Naming Convention**: `gold_{business_domain}_{metric}`
+* Example: `gold_sales_daily_summary`, `gold_customer_360`
 
-A lightweight orchestrator job coordinates the full pipeline execution.
+## Data Flow Patterns
 
-- Task 1: trigger the DLT pipeline in triggered mode to process Bronze and Silver for streaming ingestion and data quality handling.
-- Task 2: trigger the Gold-layer Databricks job to build `dim_product` with SCD Type 2, `dim_customer`, `dim_date`, and `fact_sales`.
+### 1. Streaming Ingestion Flow
+```
+Cloud Storage → Auto Loader → Bronze Table → Silver Table (streaming)
+                                                    ↓
+                                            Gold MV (batch read)
+```
 
-Execution behavior:
+**Use Cases**:
+* Real-time sales transactions
+* IoT sensor data
+* Application logs
+* Event streams
 
-- DLT handles ingestion, schema evolution, and data quality for Bronze and Silver.
-- The Gold job handles dimensional modeling and fact table creation using batch processing.
-- Tasks run sequentially with dependency, so Gold starts only after the DLT task completes successfully.
+### 2. CDC Flow (Change Data Capture)
+```
+Database Snapshot → Bronze → Auto CDC → Silver (SCD Type 2)
+                                              ↓
+                                      Gold Customer 360
+```
 
-Benefits:
+**Use Cases**:
+* Customer dimension updates
+* Product catalog changes
+* Employee records
+* Reference data sync
 
-- modular pipeline design
-- independent scalability
-- better failure isolation
-- flexible scheduling
+### 3. Batch Aggregation Flow
+```
+Silver Tables (streaming) → Gold MV (batch aggregation) → Dashboards
+```
 
-## Final Execution Steps
+**Use Cases**:
+* Daily sales summaries
+* Inventory reports
+* Customer segmentation
+* KPI calculations
 
-Run the pipeline in this order in Databricks:
+## Project Structure
 
-1. Orchestrator job
-   - Triggers the Bronze/Silver DLT pipeline first.
-   - Triggers the Gold batch job only after DLT succeeds.
+```
+/Workspace/Users/shekartelstra@gmail.com/RetailPulse/
+│
+├── .ai/                                    # AI assistant context
+│   ├── context/
+│   │   ├── architecture.md                # This file - system architecture
+│   │   ├── coding_standards.md            # Code style and conventions
+│   │   └── data_model.md                  # Data schemas and relationships
+│   ├── prompts/
+│   │   ├── bronze_pipeline.md             # Bronze ingestion prompt
+│   │   ├── generate_pipeline.md           # Full DLT pipeline creation
+│   │   ├── gold_job.md                    # Gold layer job creation
+│   │   ├── optimize_delta.md              # Delta optimization guide
+│   │   └── orchestration_job.md           # E2E orchestration workflow
+│   └── skills/
+│       ├── bronze_pipeline.md             # Bronze layer patterns
+│       ├── fact_table.md                  # Fact table design
+│       ├── orchestration.md               # Job orchestration
+│       ├── scd2_merge.md                  # SCD Type 2 implementation
+│       ├── silver_transform.md            # Silver transformation logic
+│       ├── streaming_pipeline.md          # Streaming patterns
+│       └── README.md                      # Skills documentation
+│
+├── 01_Setup/                              # Initial configuration
+│   ├── 01_configure_env.py                # Environment setup
+│   └── 02_metadata_tables.sql             # Audit table schemas
+│
+├── 02_Bronze/                             # Raw ingestion layer
+│   ├── bronze_sales_transactions.py       # Sales data ingestion
+│   ├── bronze_inventory_stock.py          # Inventory ingestion
+│   └── bronze_customer_events.py          # Customer event stream
+│
+├── 03_Silver/                             # Cleaned data layer
+│   ├── silver_sales_orders.py             # Cleaned sales
+│   ├── silver_inventory_levels.py         # Cleaned inventory
+│   ├── cdc_customers.py                   # Customer CDC
+│   └── enrich_orders.py                   # Order enrichment
+│
+├── 04_Gold/                               # Business aggregates
+│   ├── gold_sales_daily_summary.py        # Daily sales metrics
+│   ├── gold_inventory_summary.py          # Inventory KPIs
+│   └── gold_customer_360.py               # Customer profiles
+│
+├── 05_Operational/                        # Monitoring & maintenance
+│   ├── dq_validation_functions.py         # DQ framework functions
+│   ├── delta_maintenance.py               # Table optimization
+│   └── pipeline_monitor.py                # Health checks
+│
+├── 06_Testing/                            # Test suite
+│   ├── Unit_Test_Suite.py                 # Test runner
+│   └── test_cases/
+│       ├── Test_01_Schema_Validation.py
+│       ├── Test_02_Metadata_Integrity.py
+│       ├── Test_03_Freshness_Logic.py
+│       ├── Test_04_Quality_Rules.py
+│       ├── Test_05_Completeness_Checks.py
+│       └── Test_06_Advanced_Tests.py
+│
+└── 07_MCP-AgentBricks/                    # MCP integration
+    ├── DQ_Validation_MCP_Server.py        # MCP server
+    └── mcp_config.json                    # MCP configuration
+```
 
-2. DLT pipeline task
-   - Ingests files into `retailpulse.bronze.orders`
-   - Cleans and deduplicates into `retailpulse.silver.orders`
-   - Captures invalid Silver rows in `retailpulse.ops.silver_orders_quarantine`
+## Testing Framework Architecture
 
-3. Gold batch job
-   - Builds `retailpulse.silver.products`
-   - Maintains `retailpulse.gold.dim_product`
-   - Builds `retailpulse.gold.dim_customer`
-   - Builds `retailpulse.gold.dim_date`
-   - Builds `retailpulse.gold.fact_sales`
-   - Captures unresolved facts in `retailpulse.ops.fact_sales_quarantine`
+### Test Suite Organization
 
-## Validation Queries
+The testing framework provides comprehensive validation of the RetailPulse platform across 6 test suites with 28 test cases (UTC-001 to UTC-028).
 
-Use these checks after the pipeline runs:
+| Test Suite | ID | Test Cases | Coverage Area |
+|------------|----|-----------:|---------------|
+| Test_01_Schema_Validation | 782317743298624 | UTC-001 to UTC-005 | Schema integrity, column existence, data types |
+| Test_02_Metadata_Integrity | 782317743298625 | UTC-006 to UTC-008 | Metadata completeness, catalog consistency |
+| Test_03_Freshness_Logic | 782317743298626 | UTC-009 to UTC-011 | Data freshness detection, SLA validation |
+| Test_04_Quality_Rules | 782317743298627 | UTC-012 to UTC-016 | DQ rule execution, validation logic |
+| Test_05_Completeness_Checks | 782317743298628 | UTC-017 to UTC-019 | Null checks, record count validation |
+| Test_06_Advanced_Tests | 782317743298629 | UTC-020 to UTC-028 | Cross-table consistency, business logic |
 
+### Test Coverage Areas
+
+**Schema Validation** (UTC-001 to UTC-005):
+* Table existence verification
+* Column name and type validation
+* Primary key constraints
+* Generated column logic
+* Schema evolution tracking
+
+**Metadata Integrity** (UTC-006 to UTC-008):
+* Metadata catalog completeness
+* Business domain coverage
+* Owner assignment validation
+* Tag consistency
+
+**Freshness Logic** (UTC-009 to UTC-011):
+* Data freshness calculation accuracy
+* SLA threshold validation
+* Timestamp logic verification
+* Late-arriving data detection
+
+**Quality Rules** (UTC-012 to UTC-016):
+* Validation rule execution
+* NOT_NULL rule enforcement
+* POSITIVE/NON_NEGATIVE checks
+* DATE_VALID validation
+* RANGE boundary testing
+
+**Completeness Checks** (UTC-017 to UTC-019):
+* Required field population
+* Record count validation
+* Expected row presence
+* Data gap detection
+
+**Advanced Tests** (UTC-020 to UTC-028):
+* Cross-table referential integrity
+* Business rule validation
+* Aggregate accuracy
+* End-to-end data flow
+* Performance benchmarks
+
+### Test Execution Model
+
+**Test Framework Functions**:
+```python
+def log_test_result(test_id, test_name, passed, details=""):
+    """
+    Logs test execution results with visual indicators
+    
+    Args:
+        test_id: Unique test identifier (UTC-XXX)
+        test_name: Human-readable test description
+        passed: Boolean test result
+        details: Additional context on failure
+    """
+```
+
+**Execution Pattern**:
+1. Setup: Create mock data or reference production tables
+2. Execute: Run validation logic
+3. Assert: Compare results against expectations
+4. Log: Record pass/fail with details
+5. Cleanup: Remove temporary test data
+6. Summary: Display aggregate statistics
+
+**Test Isolation**:
+* Use mock data generators for unit tests
+* No impact on production tables
+* Rollback-safe temporary tables
+* Independent test execution
+
+## MCP Integration Architecture
+
+### Overview
+
+The Model Context Protocol (MCP) integration provides AI agents with programmatic access to RetailPulse data quality functions through standardized tools.
+
+### MCP Server Components
+
+**Server Location**: `/RetailPulse/07_MCP-AgentBricks/DQ_Validation_MCP_Server`
+
+**Exposed Tools**:
+
+1. **validate_table_schema**
+   * Validates table exists with expected columns and types
+   * Parameters:
+     - `catalog`: Unity Catalog name
+     - `schema`: Schema name
+     - `table_name`: Table name
+     - `expected_columns`: List of {"name": str, "type": str}
+   * Returns: Validation result with missing/mismatched columns
+
+2. **check_data_freshness**
+   * Checks if data meets freshness SLA requirements
+   * Parameters:
+     - `catalog`: Unity Catalog name
+     - `schema`: Schema name
+     - `table_name`: Table name
+     - `sla_hours`: Maximum age threshold
+   * Returns: Freshness status and hours since last update
+
+3. **validate_data_quality**
+   * Executes data quality validation rules
+   * Parameters:
+     - `catalog`: Unity Catalog name
+     - `schema`: Schema name
+     - `table_name`: Table name
+     - `rules`: List of {"column": str, "rule_type": str, "rule_value": any}
+   * Returns: Validation results per rule with pass/fail counts
+
+4. **get_table_metadata**
+   * Retrieves comprehensive table metadata
+   * Parameters:
+     - `catalog`: Unity Catalog name
+     - `schema`: Schema name
+     - `table_name`: Table name
+   * Returns: Schema, owner, tags, refresh schedule, SLA
+
+5. **check_pipeline_health**
+   * Monitors pipeline execution health
+   * Parameters:
+     - `pipeline_name`: Optional specific pipeline filter
+     - `hours`: Lookback window (default 24)
+   * Returns: Success/failure counts, error summaries
+
+### MCP Python API
+
+Direct function access for Python clients:
+
+```python
+from retailpulse.dq import (
+    validate_table_schema_uc,
+    check_data_freshness_uc,
+    validate_data_quality_uc,
+    get_table_metadata_uc,
+    check_pipeline_health_uc
+)
+
+# Example: Validate schema
+result = validate_table_schema_uc(
+    catalog="retailpulse",
+    schema="silver",
+    table_name="sales_orders",
+    expected_columns=[
+        {"name": "order_id", "type": "bigint"},
+        {"name": "customer_id", "type": "bigint"},
+        {"name": "order_date", "type": "date"}
+    ]
+)
+```
+
+### Discovery Patterns
+
+**AI Agent Usage**:
+```
+Agent: "Check if the silver_sales_orders table is up to date"
+→ Uses check_data_freshness tool
+→ Returns: "Table is fresh (updated 2 hours ago, SLA: 6 hours)"
+
+Agent: "Validate that customer_id column has no nulls"
+→ Uses validate_data_quality tool with NOT_NULL rule
+→ Returns: "Validation passed: 0 null values found"
+```
+
+**Integration Benefits**:
+* Automated DQ checks in CI/CD pipelines
+* Real-time validation in notebook workflows
+* Proactive alerting on quality degradation
+* Self-service data quality monitoring
+
+## Data Quality Framework
+
+### Validation Rule Types
+
+| Rule Type | Description | Example |
+|-----------|-------------|---------|
+| NOT_NULL | Column must not contain null values | `customer_id IS NOT NULL` |
+| POSITIVE | Numeric column must be > 0 | `amount > 0` |
+| NON_NEGATIVE | Numeric column must be >= 0 | `quantity >= 0` |
+| DATE_VALID | Date must be valid and within range | `order_date <= current_date()` |
+| RANGE | Value must fall within specified range | `age BETWEEN 0 AND 120` |
+
+### Expectation Strategies
+
+**Fail Fast** (expect_or_fail):
+```python
+@dp.expect_or_fail("critical_field", "customer_id IS NOT NULL")
+```
+* Pipeline stops on validation failure
+* Use for critical business rules
+
+**Drop Invalid** (expect_or_drop):
+```python
+@dp.expect_or_drop("valid_amount", "amount > 0")
+```
+* Invalid rows excluded from output
+* Continue processing valid data
+
+**Track Only** (expect):
+```python
+@dp.expect("completeness", "email IS NOT NULL")
+```
+* Log violations but continue
+* Monitor data quality trends
+
+### Quality Metrics Tracking
+
+All validation results stored in `retailpulse.ops.dq_validation_audit`:
+* Table/column validated
+* Rule executed
+* Pass/fail counts
+* Execution timestamp
+* Error details
+
+**Query Example**:
 ```sql
-SELECT COUNT(*) FROM retailpulse.bronze.orders;
-SELECT COUNT(*) FROM retailpulse.silver.orders;
-SELECT COUNT(*) FROM retailpulse.silver.products;
-SELECT COUNT(*) FROM retailpulse.gold.dim_product;
-SELECT COUNT(*) FROM retailpulse.gold.dim_customer;
-SELECT COUNT(*) FROM retailpulse.gold.dim_date;
-SELECT COUNT(*) FROM retailpulse.gold.fact_sales;
-SELECT COUNT(*) FROM retailpulse.ops.silver_orders_quarantine;
-SELECT COUNT(*) FROM retailpulse.ops.fact_sales_quarantine;
+SELECT 
+  table_name,
+  validation_rule,
+  SUM(records_validated) as total_records,
+  SUM(records_failed) as failed_records,
+  ROUND(100.0 * SUM(records_failed) / SUM(records_validated), 2) as failure_rate
+FROM retailpulse.ops.dq_validation_audit
+WHERE validation_date >= current_date() - INTERVAL 7 DAYS
+GROUP BY table_name, validation_rule
+HAVING failure_rate > 1.0
+ORDER BY failure_rate DESC;
 ```
 
-## Current Scope
+## Operational Components
 
-Implemented:
+### Audit Tables
 
-- order file generation
-- bronze orders ingestion
-- silver orders transformation
-- silver products seed table
-- SCD2 `dim_product`
-- `dim_customer`
-- `dim_date`
-- `fact_sales`
-- DLT Bronze/Silver pipeline with quarantine handling
-- orchestrator-based enterprise workflow
+**1. metadata_catalog**
+* Central schema registry
+* 30 columns tracking schema, validation rules, SLA, optimization settings
+* Single source of truth for table metadata
 
-Potential next enhancements:
+**2. dq_validation_audit**
+* Data quality validation history
+* Tracks rule execution, pass/fail counts, error messages
+* Enables DQ trend analysis
 
-- add a true business `order_timestamp` instead of relying on `ingest_ts`
-- add `customer_sk` surrogate key to `dim_customer`
-- add fact table audit columns and load timestamps
-- optimize Delta tables with `OPTIMIZE` and `ZORDER`
-- extend quarantine flows into a formal reprocessing framework with remediation status and replay logic
+**3. etl_job_audit**
+* Pipeline execution logs
+* Job start/end times, status, row counts, error tracking
+* Performance monitoring
+
+**4. maintenance_audit**
+* Table optimization history
+* OPTIMIZE, VACUUM, ANALYZE operations
+* Storage and performance metrics
+
+**5. table_change_audit**
+* Schema evolution tracking
+* Column additions, type changes, table renames
+* Impact analysis for downstream dependencies
+
+### Monitoring & Alerting
+
+**System Metrics**:
+* Pipeline success/failure rates
+* Data freshness SLA compliance
+* Data quality rule violations
+* Table size and growth trends
+
+**Alert Triggers**:
+* Pipeline failures (immediate)
+* SLA breaches (within 1 hour)
+* Quality degradation (>5% failure rate)
+* Schema changes (notification)
+
+**Dashboards**:
+* Pipeline health (last 24 hours)
+* DQ scorecard (by table/domain)
+* Data freshness status
+* Storage and compute costs
+
+## Technology Stack
+
+**Compute**:
+* Databricks Runtime 14.3 LTS
+* Photon acceleration enabled
+* Unity Catalog for governance
+
+**Storage**:
+* Delta Lake (ACID transactions)
+* Cloud object storage (S3/ADLS/GCS)
+* Liquid clustering for query optimization
+
+**Processing**:
+* Delta Live Tables (streaming & batch)
+* Auto Loader (cloud file ingestion)
+* Auto CDC (change data capture)
+
+**Languages**:
+* Python (PySpark, Delta Live Tables API)
+* SQL (Delta SQL, DLT SQL)
+
+**Orchestration**:
+* Databricks Workflows
+* DLT pipelines (continuous/scheduled)
+
+**Monitoring**:
+* System tables (query history, lineage)
+* Custom audit tables
+* MCP integration for AI agents
+
+## Security & Governance
+
+**Unity Catalog**:
+* Catalog: `retailpulse`
+* Schemas: `bronze`, `silver`, `gold`, `ops`
+* Fine-grained access control (GRANT/REVOKE)
+
+**Row/Column Security**:
+* Row filters for PII protection
+* Column masking for sensitive data
+* Dynamic views based on user context
+
+**Data Classification**:
+* Tags: `PII`, `PHI`, `Confidential`, `Public`
+* Automated tagging via metadata catalog
+* Compliance reporting
+
+## Performance Optimization
+
+**Table Optimization**:
+* Liquid clustering on gold tables
+* Auto-optimize for streaming tables
+* Z-ordering for specific query patterns
+* Regular VACUUM for storage efficiency
+
+**Caching**:
+* Delta cache for hot data
+* Materialized views for expensive aggregations
+* Query result caching in BI tools
+
+**Partitioning**:
+* Date-based partitioning for large tables
+* Avoid over-partitioning (<1GB partitions)
+* Liquid clustering preferred for multi-dimensional queries
+
+## Scalability Considerations
+
+**Current Scale**:
+* ~100GB data volume
+* ~1M rows/day ingestion rate
+* 5-10 concurrent users
+
+**Scale Targets**:
+* 10TB+ data volume
+* 100M+ rows/day ingestion
+* 100+ concurrent users
+
+**Scaling Strategy**:
+* Horizontal scaling via autoscaling clusters
+* Partition large tables (>100GB)
+* Optimize medallion layer boundaries
+* Implement data lifecycle policies (archive cold data)
+
+## Future Enhancements
+
+**Planned Features**:
+1. ML model integration for predictive analytics
+2. Real-time dashboard streaming
+3. Advanced CDC patterns (merge strategies)
+4. Data mesh architecture (domain-driven ownership)
+5. Cross-region replication for HA/DR
+6. Advanced security (encryption, tokenization)
+
+**Technical Debt**:
+* Standardize error handling across pipelines
+* Implement comprehensive integration tests
+* Enhance monitoring dashboard granularity
+* Document runbook procedures
+* Automate disaster recovery testing
+
+---
+
+**Last Updated**: 2024-01-15  
+**Version**: 1.0  
+**Maintained By**: Data Engineering Team
